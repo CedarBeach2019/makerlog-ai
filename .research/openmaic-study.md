@@ -1,1049 +1,1098 @@
-# OpenMAIC Deep Research Study
+# OpenMAIC Deep Study — TTRPG & StudyLog Adaptation
 
-## Executive Summary
+> Repo: [THU-MAIC/OpenMAIC](https://github.com/THU-MAIC/OpenMAIC) v0.1.0
+> Date: 2026-03-26
+> Purpose: Inform DMlog.ai (TTRPG platform) and studylog.ai (study platform) design
 
-**OpenMAIC** (Open Multi-Agent Interactive Classroom) is an open-source AI platform from Tsinghua University that transforms any topic or document into a rich, interactive classroom experience. Powered by multi-agent orchestration, it generates slides, quizzes, interactive simulations, and project-based learning activities delivered by AI teachers and classmates who can speak, draw on whiteboards, and engage in real-time discussions.
+---
 
-### Why OpenMAIC Matters for log-origin
+## 1. Executive Summary
 
-OpenMAIC represents a **paradigm shift** in interactive AI systems that directly aligns with log-origin's goals for DMlog.ai (TTRPG game mastering) and StudyLog.ai (interactive learning):
+OpenMAIC is a production-ready open-source multi-agent interactive classroom built on Next.js 16 + React 19 + LangGraph. It transforms topics/documents into full interactive lessons with slides, quizzes, whiteboard drawing, TTS narration, and real-time multi-agent discussions.
 
-1. **Multi-Agent Orchestration**: LangGraph-based director system that manages agent turns, discussions, and interactions
-2. **Real-time Interactive UI**: Canvas-based slide rendering with live effects (spotlight, laser), whiteboard drawing, and TTS integration
-3. **Content Generation Pipeline**: Two-stage generation (outlines → scenes) with rich scene types (slides, quizzes, interactive, PBL)
-4. **State Management**: Sophisticated Zustand stores with IndexedDB persistence for session continuity
-5. **Extensibility**: Plugin architecture for agents, providers, and media generation
+**Why it matters for DMlog.ai:**
+- The entire multi-agent orchestration pattern (director → agents → actions) maps 1:1 to TTRPG sessions: Game Master (director) → NPCs (agents) → scene actions
+- The Action system (speech, whiteboard, spotlight, laser) directly maps to TTRPG scene narration, map reveals, character highlights
+- The "Roundtable" component is essentially a player/DM interface with avatars, speech bubbles, and reactive UI
+- The playback engine's state machine (idle → playing → paused → live) is exactly a TTRPG session flow
 
-For log-origin, OpenMAIC provides a **blueprint** for:
-- **DMlog.ai**: Converting classroom orchestration into game master console (scene management, NPC control, combat tracking)
-- **StudyLog.ai**: Adapting interactive presentation system into study sessions with generated slides and quizzes
-- **Real-time Collaboration**: Multi-user interaction patterns for TTRPG sessions and study groups
+**Why it matters for studylog.ai:**
+- Scene types (slide, quiz, interactive, PBL) are study session primitives
+- The generation pipeline (outline → scenes → content) produces structured study materials
+- Quiz grading with AI feedback is production-ready
+- The interactive whiteboard is ideal for collaborative study rooms
 
-## Architecture Deep Dive
+**Key stats:**
+- ~150+ TypeScript source files (excluding node_modules and vendor packages)
+- Dependencies: LangGraph, Vercel AI SDK, motion (Framer), Zustand, Tailwind CSS 4, pptxgenjs
+- Fully stateless backend — all state in client requests
+- SSE streaming for real-time multi-agent generation
 
-### Component Hierarchy
+---
 
-```
-OpenMAIC/
-├── app/                        # Next.js App Router
-│   ├── api/                    # Server API routes (~18 endpoints)
-│   │   ├── generate/           # Scene generation pipeline
-│   │   ├── generate-classroom/ # Async classroom job submission
-│   │   ├── chat/               # Multi-agent discussion (SSE streaming)
-│   │   └── ...                 # quiz-grade, parse-pdf, web-search, etc.
-│   ├── classroom/[id]/         # Classroom playback page
-│   └── page.tsx                # Home page (generation input)
-│
-├── lib/                        # Core business logic
-│   ├── generation/             # Two-stage lesson generation pipeline
-│   ├── orchestration/          # LangGraph multi-agent orchestration
-│   ├── playback/               # Playback state machine
-│   ├── action/                 # Action execution engine (28+ actions)
-│   ├── ai/                     # LLM provider abstraction
-│   ├── store/                  # Zustand state stores
-│   ├── types/                  # Centralized TypeScript types
-│   └── ...                     # audio, media, export, hooks, i18n
-│
-├── components/                 # React UI components
-│   ├── slide-renderer/         # Canvas-based slide editor & renderer
-│   ├── scene-renderers/        # Quiz, Interactive, PBL scene renderers
-│   ├── generation/             # Lesson generation toolbar & progress
-│   ├── chat/                   # Chat area & session management
-│   ├── whiteboard/             # SVG-based whiteboard drawing
-│   ├── agent/                  # Agent avatar, config, info bar
-│   └── ui/                     # Base UI primitives (shadcn/ui + Radix)
-│
-├── packages/                   # Workspace packages
-│   ├── pptxgenjs/              # Customized PowerPoint generation
-│   └── mathml2omml/            # MathML → Office Math conversion
-│
-└── skills/                     # OpenClaw / ClawHub skills
-    └── openmaic/               # Guided OpenMAIC setup & generation SOP
-```
+## 2. Architecture
 
-### Data Flow
+### 2.1 High-Level Stack
 
 ```
-User Input → Requirements Analysis → Outline Generation → Scene Generation → Playback
-     │              │                     │                    │              │
-     │              │                     │                    │              │
-     ▼              ▼                     ▼                    ▼              ▼
-  Text/PDF    Vision/OCR           Scene Outlines        Full Scenes      Interactive
-  Upload      Processing           (JSON structure)      (with Actions)    Classroom
-                                                                           │
-                                                                           │
-                                                                           ▼
-                                                                     Multi-Agent
-                                                                     Discussion
-                                                                           │
-                                                                           ▼
-                                                                     Real-time SSE
-                                                                     Streaming
+┌─────────────────────────────────────────────────┐
+│  Frontend (Next.js App Router + React 19)       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
+│  │ Roundtable│ │  Canvas   │ │  Chat / Sidebar  │ │
+│  │ Component │ │  Area     │ │  Components      │ │
+│  └─────┬─────┘ └─────┬─────┘ └────────┬─────────┘ │
+│        │             │                │           │
+│  ┌─────┴─────────────┴────────────────┴─────────┐ │
+│  │        Zustand Stores (stage, settings,      │ │
+│  │        canvas, chat, agent-registry)         │ │
+│  └────────────────────┬─────────────────────────┘ │
+└───────────────────────┼───────────────────────────┘
+                        │ SSE (fetch + ReadableStream)
+┌───────────────────────┼───────────────────────────┐
+│  Backend (Next.js API Routes)                    │
+│  ┌────────────────────┴─────────────────────────┐ │
+│  │  POST /api/chat → stateless-generate()       │ │
+│  │  POST /api/generate/* → outline/scene/action  │ │
+│  │  POST /api/tts → Azure/OpenAI TTS            │ │
+│  │  POST /api/quiz-grade → AI grading           │ │
+│  └────────────────────┬─────────────────────────┘ │
+│                       │                          │
+│  ┌────────────────────┴─────────────────────────┐ │
+│  │  LangGraph StateGraph (director → agents)    │ │
+│  │  Director Graph:                             │ │
+│  │    START → director ──(end)──→ END           │ │
+│  │              │                               │ │
+│  │              └─(next)→ agent_gen → director   │ │
+│  └──────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────┘
 ```
 
-### Technical Stack
+### 2.2 Data Flow (Live Chat)
 
-- **Frontend**: Next.js 16, React 19, TypeScript 5, Tailwind CSS 4
-- **State Management**: Zustand with IndexedDB persistence
-- **Multi-Agent**: LangGraph 1.1 with custom director graph
-- **UI Components**: shadcn/ui + Radix primitives
-- **Slide Rendering**: Custom canvas-based editor (PPTist fork)
-- **Audio**: TTS providers (OpenAI, ElevenLabs, Azure, Browser-native), ASR
-- **Media Generation**: Image/video providers (Grok, Qwen, Kling, Veo)
-- **Export**: PowerPoint (.pptx) and interactive HTML
-- **Build**: pnpm workspace, Vercel deployment
+1. User sends message → `POST /api/chat` with `StatelessChatRequest`
+2. Request includes: full message history, store state (stage/scenes), agent config, API credentials
+3. `statelessGenerate()` creates a LangGraph `StateGraph`
+4. Director node decides which agent speaks (single-agent: code logic; multi-agent: LLM decision)
+5. Agent generates structured JSON array: `[{type:"action",name:"...",params:{...}}, {type:"text",content:"..."}, ...]`
+6. Events streamed as SSE: `agent_start`, `text_delta`, `action`, `cue_user`, `done`
+7. Client processes events: speech bubbles, TTS playback, whiteboard drawing, discussion triggers
 
-## Agent Orchestrator Analysis
+### 2.3 Key Design Decisions
 
-### LangGraph Director System
+- **Stateless backend**: No session storage. Client sends full state on every request. Simplifies scaling (Workers-compatible pattern).
+- **Structured JSON output**: Agents output `[action, text, action, text, ...]` interleaved arrays, not freeform text. Parsed with `partial-json` + `jsonrepair` for robust streaming.
+- **Fire-and-forget vs sync actions**: Spotlight/laser are immediate visual effects; speech/whiteboard/discussion are blocking (wait for completion).
+- **Director as orchestrator**: The director is a meta-agent that never speaks to users — it only decides *which agent* speaks and *when to stop*.
 
-OpenMAIC uses a **unified LangGraph state machine** for both single and multi-agent orchestration:
+---
 
-```typescript
-// Graph topology:
-// START → director ──(end)──→ END
-//            │
-//            └─(next)→ agent_generate ──→ director (loop)
-```
+## 3. Agent System
 
-**Key Components**:
-
-1. **Director Node**: Decides which agent speaks next
-   - Single agent: Pure code logic (no LLM)
-   - Multi agent: LLM-based decision with code fast-paths
-   - Turn limit enforcement
-
-2. **Agent Generate Node**: Runs one agent's generation
-   - Streams `agent_start`, `text_delta`, `action`, `agent_end` events
-   - Enforces action permissions based on scene type
-   - Maintains whiteboard action ledger
-
-3. **State Management**:
-   ```typescript
-   const OrchestratorState = Annotation.Root({
-     messages: Annotation<StatelessChatRequest['messages']>,
-     storeState: Annotation<StatelessChatRequest['storeState']>,
-     availableAgentIds: Annotation<string[]>,
-     maxTurns: Annotation<number>,
-     currentAgentId: Annotation<string | null>,
-     turnCount: Annotation<number>,
-     agentResponses: Annotation<AgentTurnSummary[]>,
-     whiteboardLedger: Annotation<WhiteboardActionRecord[]>,
-     shouldEnd: Annotation<boolean>,
-     totalActions: Annotation<number>,
-   });
-   ```
-
-### Agent Registry System
+### 3.1 Agent Configuration
 
 ```typescript
 interface AgentConfig {
   id: string;
-  name: string; // Display name
-  role: string; // Short role description
-  persona: string; // Full system prompt
-  avatar: string; // Emoji or image URL
-  color: string; // UI theme color
-  allowedActions: string[]; // Action types this agent can use
-  priority: number; // Priority for director selection (1-10)
-  voiceConfig?: { providerId: TTSProviderId; voiceId: string };
-  isDefault: boolean;
-  isGenerated?: boolean; // For LLM-generated agents
-  boundStageId?: string; // Stage ID this agent was generated for
+  name: string;
+  role: 'teacher' | 'assistant' | 'student';
+  persona: string;        // Freeform personality description
+  avatar: string;          // URL or path
+  color: string;           // Brand color hex
+  allowedActions: string[];// Which actions this agent can use
+  priority: number;        // Higher = speaks first in discussions
+  isGenerated?: boolean;   // Auto-generated vs default agents
+  boundStageId?: string;   // Scope to specific classroom
 }
 ```
 
-**Action Categories**:
-- `WHITEBOARD_ACTIONS`: `wb_open`, `wb_draw_text`, `wb_draw_shape`, etc.
-- `SLIDE_ACTIONS`: `spotlight`, `laser`, `play_video`
-- Role-based mapping: Teachers get slide + whiteboard, others get whiteboard only
+Agents are stored in a Zustand `agent-registry` store. Default agents ship with the app; users can create custom ones. Generated agents can be scoped to a specific classroom.
 
-### Stateless Chat API
+### 3.2 Director Graph (LangGraph)
 
-**Key Innovation**: Fully stateless server with client-maintained state:
+The orchestration uses LangGraph's `StateGraph` with a unified topology for single and multi-agent:
+
+```
+START → director ──(end)──→ END
+            │
+            └─(next)→ agent_generate ──→ director (loop)
+```
+
+**Director logic:**
+- **Single agent**: Pure code — dispatch agent on turn 0, cue user on subsequent turns
+- **Multi agent**: LLM-based decision with fast-paths:
+  - Turn 0: Always dispatch the `triggerAgentId` (or highest priority teacher)
+  - Turn limit: Force end if `turnCount >= maxTurns`
+  - Otherwise: LLM decides which agent speaks next based on conversation summary
+
+**Director prompt construction** (`director-prompt.ts`):
+- Builds agent list with IDs, names, roles, priorities
+- Includes conversation summary, whiteboard ledger state, user profile
+- Discussion mode vs Q&A mode有不同的规则
+- Includes "when to end" criteria (all agents responded, topic exhausted, user satisfied)
+
+**Director decision output** (structured JSON):
+```json
+{
+  "next_agent_id": "teacher-1",
+  "reason": "User asked about X, teacher should explain first",
+  "should_end": false
+}
+```
+
+### 3.3 Agent Generation (Structured Output)
+
+When an agent is dispatched, it receives a structured prompt built by `prompt-builder.ts`:
+- System message with agent persona + role + available actions
+- Scene context (current slide content, whiteboard state)
+- Conversation history (summarized if too long)
+- Allowed actions with JSON schemas from `tool-schemas.ts`
+
+The agent outputs a JSON array, e.g.:
+```json
+[
+  {"type":"action","name":"speech","params":{"text":"Let me explain..."}},
+  {"type":"action","name":"spotlight","params":{"elementId":"title-1"}},
+  {"type":"action","name":"wb_open","params":{}},
+  {"type":"action","name":"wb_draw_chart","params":{"chartType":"bar","x":100,"y":50,...}},
+  {"type":"text","content":"As you can see from this chart..."}
+]
+```
+
+### 3.4 Action System
+
+The unified Action type union from `types/action.ts`:
+
+| Category | Actions | Blocking? |
+|----------|---------|-----------|
+| Visual | `spotlight`, `laser` | No (fire-and-forget) |
+| Speech | `speech` | Yes (wait for TTS) |
+| Whiteboard | `wb_open`, `wb_draw_text`, `wb_draw_shape`, `wb_draw_chart`, `wb_draw_latex`, `wb_draw_table`, `wb_draw_line`, `wb_clear`, `wb_delete`, `wb_close` | Yes |
+| Media | `play_video` | Yes |
+| Social | `discussion` | Yes (triggers roundtable) |
+
+### 3.5 TTRPG Mapping
+
+| OpenMAIC Concept | TTRPG Equivalent | Notes |
+|-----------------|-----------------|-------|
+| Director agent | Game Master (AI DM) | Decides who acts, when scenes end |
+| Teacher agent | NPC / Narrator | Provides information, sets context |
+| Student agent | NPC companion / party member | Has personality, can initiate discussions |
+| User (learner) | Player character | Sends messages, triggers actions |
+| Scene → slide | Scene → location/map | Visual backdrop for narration |
+| Scene → quiz | Skill check / puzzle | Interactive challenge |
+| Speech action | Narration | DM or NPC describes what's happening |
+| Spotlight action | Focus on NPC/object | "The old man leans forward..." |
+| Whiteboard draw | Map annotation | "The DM draws the dungeon layout..." |
+| Discussion action | NPC interaction / party dialogue | Multi-character conversation |
+| Playback engine | Session state machine | idle → exploring → combat → roleplay |
+
+**Specific adaptation for DMlog.ai:**
+
+```
+Director (AI DM)
+├── Narrator agent (describes scenes, sets atmosphere)
+├── NPC-1 agent (guard at the gate — gruff, suspicious)
+├── NPC-2 agent (merchant — friendly, greedy)
+├── NPC-3 agent (mysterious stranger — cryptic)
+└── Player (user)
+    ├── Sends actions: "I approach the guard"
+    ├── Rolls dice (dice action — new)
+    └── Makes choices (branching action — new)
+```
+
+New action types needed for TTRPG:
+- `dice_roll` — Trigger dice roll with type (d20, d6, etc.), modifier, reason
+- `scene_change` — Transition to new scene/location with description
+- `npc_appear` / `npc_leave` — Add/remove NPCs from scene
+- `ambient_play` — Play background audio/music
+- `inventory_update` — Add/remove items from player inventory
+- `stat_change` — Modify HP, MP, stats
+- `branch_choice` — Present player with branching choices
+- `time_pass` — Advance game time, trigger time-based events
+- `combat_start` / `combat_end` — Enter/exit combat mode
+
+---
+
+## 4. Interactive Presentation System
+
+### 4.1 Stage & Scene Model
+
+```typescript
+interface Stage {
+  id: string;
+  name: string;
+  description?: string;
+  whiteboard?: Whiteboard[];
+  agentIds?: string[];
+}
+
+interface Scene {
+  id: string;
+  stageId: string;
+  type: 'slide' | 'quiz' | 'interactive' | 'pbl';
+  title: string;
+  order: number;
+  content: SceneContent;  // Type-specific
+  actions?: Action[];      // Playback actions
+  whiteboards?: Slide[];
+  multiAgent?: {
+    enabled: boolean;
+    agentIds: string[];
+    directorPrompt?: string;
+  };
+}
+```
+
+### 4.2 Slide System
+
+Built on PPTist (open-source PPT editor). Slides are JSON canvas data with elements:
+- Text, images, shapes, charts, tables, LaTeX formulas
+- Each slide element has a unique `elementId` for targeting by actions
+- Slides support themes, transitions, and turning modes
+
+The Canvas Area (`canvas-area.tsx`) renders slides with:
+- Spotlight overlay (dims all except target element)
+- Laser pointer animation (red dot following elements)
+- Whiteboard overlay (transparent drawing layer)
+- Presentation mode (fullscreen, speech bubbles overlay)
+
+### 4.3 Quiz System
+
+```typescript
+interface QuizQuestion {
+  id: string;
+  type: 'single' | 'multiple' | 'short_answer';
+  question: string;
+  options?: QuizOption[];
+  answer?: string[];
+  analysis?: string;
+  commentPrompt?: string;
+  hasAnswer?: boolean;
+  points?: number;
+}
+```
+
+- Multiple question types (single/multiple choice, short answer)
+- AI grading via `/api/quiz-grade` endpoint
+- Immediate feedback with analysis
+- Points system for gamification
+
+### 4.4 Whiteboard System
+
+The whiteboard is a transparent overlay on top of slides with:
+- Draw text, shapes, charts, LaTeX, tables, lines/arrows
+- Each element has a custom `elementId` for later deletion
+- Coordinate system: 0-1000 x 0-562 (16:9 aspect ratio)
+- Open/close animation
+- Whiteboard ledger tracks all actions for director awareness
+
+### 4.5 Playback Engine
+
+A state machine class (`PlaybackEngine`) that:
+- Consumes `Scene.actions[]` directly — no compile step
+- States: `idle → playing → paused → live`
+- Supports pre-generated TTS audio or browser-native Web Speech API
+- Auto-detects CJK language for TTS voice selection
+- Proactive discussion triggers: when a `discussion` action fires, shows a "ProactiveCard" asking user if they want to join
+- Progress tracking with `PlaybackSnapshot` for resume-on-refresh
+
+### 4.6 TTRPG Scene Adaptation
+
+Replace "slides" with "scene illustrations" — same canvas system, different content:
+- Location art (tavern, dungeon, forest) instead of educational diagrams
+- Character portraits as spotlight targets instead of slide elements
+- Map layers instead of charts
+- Ambient text overlays for scene descriptions
+
+**Scene types for TTRPG:**
+| OpenMAIC | TTRPG | Implementation |
+|----------|-------|----------------|
+| `slide` | `scene` — location with narration | Same canvas, different generator prompt |
+| `quiz` | `skill_check` — dice-based challenge | Modified quiz with dice mechanics |
+| `interactive` | `exploration` — point-and-click area | iframe or custom canvas interaction |
+| `pbl` | `quest` — multi-step objective | Task tracking + NPC interactions |
+
+### 4.7 StudyLog Scene Adaptation
+
+Study sessions map directly:
+| OpenMAIC | StudyLog | Notes |
+|----------|----------|-------|
+| `slide` | `lecture` — study material | Same system, study-focused prompts |
+| `quiz` | `practice` — quiz/practice | Same system, spaced repetition metadata |
+| `interactive` | `simulation` — interactive demo | Chemistry sim, code playground, etc. |
+| `pbl` | `project` — project workspace | Research project with milestones |
+
+---
+
+## 5. Roundtable Component — The Core UI
+
+### 5.1 Overview
+
+`components/roundtable/index.tsx` (~700 lines) is the central interaction hub. It's essentially:
+
+**Three-column layout:**
+```
+┌──────────┬────────────────────────┬──────────────┐
+│ Teacher  │   Interaction Stage    │  Participants │
+│ Avatar   │   (speech bubbles,     │  (student    │
+│          │    input, voice)       │   avatars,   │
+│          │                        │   user btns) │
+└──────────┴────────────────────────┴──────────────┘
+```
+
+### 5.2 Key Features
+
+- **Presentation mode**: Fullscreen overlay with floating speech bubbles, dock (bottom), toolbar
+- **Voice input**: Web Speech API recording with animated waveform visualization
+- **Text input**: Textarea with send button, cooldown to prevent double-sends
+- **Thinking indicator**: Animated dots when director/agent is processing
+- **"Your turn" cue**: Pulsing button when user is expected to respond
+- **ProactiveCard**: Popover when an NPC wants to initiate discussion (skip/listen)
+- **TTS controls**: Mute, volume, playback speed, auto-play
+- **Keyboard shortcuts**: T (text), V (voice), Space (pause/resume), Escape (dismiss)
+- **End flash notification**: Brief toast when discussion/QA ends
+- **Agent hover cards**: Show agent name, role, persona on hover
+
+### 5.3 Props Architecture
+
+The component is highly prop-driven (28+ props), making it composable:
+- `mode`: `'playback' | 'autonomous'`
+- `playbackView`: Centralized derived state (phase, sourceText, bubbleRole, buttonState, isInLiveFlow)
+- `speakingAgentId`, `currentSpeech`, `thinkingState`: Live state from SSE
+- Callbacks: `onMessageSend`, `onDiscussionStart`, `onDiscussionSkip`, `onStopDiscussion`, etc.
+
+### 5.4 TTRPG Adaptation of Roundtable
+
+The Roundtable is almost perfectly suited for TTRPG with minor modifications:
+
+```
+┌──────────┬────────────────────────┬──────────────┐
+│ Scene    │   Narrative /          │  Party       │
+│ Art      │   Dialogue Area        │  Members     │
+│ (tavern) │   (DM narration,       │  (player +   │
+│          │    NPC speech,         │   NPC        │
+│          │    player actions)     │   avatars)   │
+└──────────┴────────────────────────┴──────────────┘
+```
+
+**Modifications needed:**
+1. Replace "Teacher avatar" with "Scene art panel" (larger, shows location illustration)
+2. Add dice roll UI (d20 roller overlay instead of quiz)
+3. Add character sheet sidebar (HP, stats, inventory)
+4. Add initiative tracker for combat
+5. Add "Game log" tab (scrollable history of events)
+6. Modify ProactiveCard for NPC-initiated interactions
+7. Add ambient audio controls (background music, SFX)
+
+### 5.5 StudyLog Adaptation of Roundtable
+
+For study sessions, the Roundtable becomes a "Study Room":
+- Teacher avatar → AI tutor avatar
+- Student agents → Study buddies (optional, for collaborative study)
+- Discussion → Study discussion (ask questions, explore topics)
+- Quiz actions → Practice questions
+- Whiteboard → Collaborative scratchpad
+
+---
+
+## 6. Backend Architecture
+
+### 6.1 API Routes
+
+| Route | Purpose |
+|-------|---------|
+| `POST /api/chat` | Stateless multi-agent chat (SSE stream) |
+| `POST /api/generate/scene-outlines-stream` | Generate lesson outline (streaming) |
+| `POST /api/generate/scene-content` | Generate scene content (slides, quiz, etc.) |
+| `POST /api/generate/scene-actions` | Generate playback actions for a scene |
+| `POST /api/generate/agent-profiles` | Generate custom agent personas |
+| `POST /api/generate/tts` | Text-to-speech (Azure/OpenAI) |
+| `POST /api/generate/image` | Generate images (for slides) |
+| `POST /api/generate/video` | Generate videos |
+| `POST /api/transcription` | Speech-to-text (for voice input) |
+| `POST /api/quiz-grade` | AI grading for quiz answers |
+| `POST /api/classroom` | Classroom CRUD (CRUD operations) |
+| `GET /api/azure-voices` | List available Azure TTS voices |
+| `POST /api/web-search` | Web search for enrichment |
+| `POST /api/pbl/chat` | PBL project chat |
+
+### 6.2 Stateless Chat API (`/api/chat`)
+
+The most important endpoint for our adaptation. Fully stateless:
 
 ```typescript
 interface StatelessChatRequest {
-  messages: UIMessage<ChatMessageMetadata>[]; // Conversation history
-  storeState: { stage, scenes, currentSceneId, mode, whiteboardOpen }; // App state
-  config: { agentIds, sessionType?, discussionTopic?, triggerAgentId? };
-  directorState?: DirectorState; // Accumulated director state
-  userProfile?: { nickname?, bio? };
+  messages: UIMessage[];           // Full conversation history
+  storeState: {
+    stage: Stage | null;
+    scenes: Scene[];
+    currentSceneId: string | null;
+    mode: 'autonomous' | 'playback';
+    whiteboardOpen: boolean;
+  };
+  config: {
+    agentIds: string[];
+    sessionType?: 'qa' | 'discussion';
+    discussionTopic?: string;
+    discussionPrompt?: string;
+    triggerAgentId?: string;
+    agentConfigs?: AgentConfig[];  // For generated agents
+  };
+  directorState?: DirectorState;   // Accumulated state from previous turns
+  userProfile?: { nickname?: string; bio?: string };
   apiKey: string;
+  baseUrl?: string;
+  model?: string;
+  providerType?: string;
 }
 ```
 
-**SSE Events**:
+**SSE event types:**
+- `agent_start` — Agent begins speaking (id, name, avatar, color)
+- `agent_end` — Agent finishes
+- `text_delta` — Streaming text chunk
+- `action` — Structured action (name, params, agentId)
+- `thinking` — Director/agent processing indicator
+- `cue_user` — Prompt user to respond
+- `done` — Generation complete (with directorState for next turn)
+- `error` — Error message
+
+### 6.3 Workers Compatibility
+
+The stateless design is excellent for Cloudflare Workers adaptation:
+- **No session storage** — all state in request/response
+- **SSE via ReadableStream** — works on Workers with `TransformStream`
+- **External API calls only** — LLM providers, TTS, etc.
+
+**Challenges for Workers:**
+1. **LangGraph dependency** — `@langchain/langgraph` may not run on Workers. Solution: reimplement the director graph as a simple loop with LLM calls
+2. **`partial-json` + `jsonrepair`** — Need to verify Workers compatibility. Both are lightweight JSON utilities, should work
+3. **TTS streaming** — Azure TTS needs WebSocket or HTTP streaming. Works via `fetch` on Workers
+4. **File system** — No `fs` on Workers. OpenMAIC uses it for classroom media storage — replace with R2/KV
+
+**Simplified Workers architecture:**
+```
+Worker receives StatelessChatRequest
+  → Director decision (single LLM call or code logic)
+  → Agent generation (single LLM call with structured output)
+  → Stream SSE events back
+```
+
+No LangGraph needed — the director graph is just:
+1. Build director prompt
+2. Call LLM
+3. Parse decision JSON
+4. If not ended: build agent prompt, call LLM, parse actions/text
+5. Repeat from 1
+
+---
+
+## 7. Code Patterns Worth Porting
+
+### 7.1 Structured JSON Array Output Pattern
+
+This is the most valuable pattern. Instead of tool calling, agents output interleaved JSON arrays:
+
 ```typescript
-type StatelessEvent =
-  | { type: 'agent_start'; data: { messageId, agentId, agentName, agentAvatar, agentColor } }
-  | { type: 'agent_end'; data: { messageId, agentId } }
-  | { type: 'text_delta'; data: { content: string; messageId?: string } }
-  | { type: 'action'; data: { actionId, actionName, params, agentId, messageId? } }
-  | { type: 'thinking'; data: { stage: 'director' | 'agent_loading'; agentId? } }
-  | { type: 'cue_user'; data: { fromAgentId?: string; prompt?: string } }
-  | { type: 'done'; data: { totalActions, totalAgents, directorState? } }
-  | { type: 'error'; data: { message: string } };
+// Agent output format
+[
+  {"type":"action","name":"speech","params":{"text":"Let me explain..."}},
+  {"type":"text","content":"As you can see from this chart..."},
+  {"type":"action","name":"wb_draw_chart","params":{...}}
+]
 ```
 
-### TTRPG Adaptation Mapping
+**Why this works:**
+- No tool call overhead (no parallel tool execution, no retry logic)
+- Actions and narration can interleave naturally
+- Easy to parse incrementally with `partial-json`
+- Single generation pass (no loop)
 
-**DMlog.ai Adaptation**:
-```
-OpenMAIC Agent → TTRPG NPC/Character
-  │                    │
-  ▼                    ▼
-Teacher Agent   → Game Master
-Student Agents  → Player Characters
-Discussion      → In-game dialogue
-Whiteboard      → Battle map / Scene visualization
-Spotlight/Laser → Focus on character/object
-Slides          → Scene descriptions / Handouts
-Quiz            → Skill checks / Puzzles
-```
-
-**Key Translation Patterns**:
-1. **Agent → Character**: Each TTRPG character gets agent config with persona, voice, allowed actions
-2. **Director → Initiative Tracker**: LangGraph director manages combat turns
-3. **Whiteboard → Battle Map**: SVG-based drawing for maps, tokens, fog of war
-4. **Actions → Game Mechanics**: `roll_dice`, `apply_damage`, `cast_spell`, `move_token`
-5. **Discussion → Roleplay**: Multi-agent conversations with character voices
-
-## Interactive Presentation System
-
-### Playback Engine State Machine
-
+**Port to log-origin:**
 ```typescript
-// State machine:
-//                  start()                  pause()
-//   idle ──────────────────→ playing ──────────────→ paused
-//     ▲                         ▲                       │
-//     │                         │  resume()             │
-//     │                         └───────────────────────┘
-//     │
-//     │  handleEndDiscussion()
-//     │                         confirmDiscussion()
-//     │                         / handleUserInterrupt()
-//     │                              │
-//     │                              ▼         pause()
-//     └──────────────────────── live ──────────────→ paused
-//                                 ▲                    │
-//                                 │ resume / user msg  │
-//                                 └────────────────────┘
-```
-
-**Key Features**:
-1. **Unified Action Consumption**: Direct execution of `Scene.actions[]` via `ActionEngine`
-2. **Speech Timing**: TTS integration with browser-native fallback, reading time estimation
-3. **Discussion Triggers**: Proactive cards with 3s delay before showing
-4. **State Persistence**: Snapshot system for resume/restore
-5. **Browser TTS Workarounds**: Chrome bug handling (15s cutoff), Firefox compatibility
-
-### Action Engine
-
-**28+ Action Types** in two categories:
-
-**Fire-and-forget** (immediate):
-- `spotlight`: Focus on element with dimming
-- `laser`: Point at element with laser effect
-
-**Synchronous** (await completion):
-- `speech`: TTS narration
-- `wb_*`: Whiteboard operations (draw text/shape/chart/latex/table/line, clear, delete)
-- `play_video`: Video playback
-- `discussion`: Trigger roundtable discussion
-
-**Execution Pattern**:
-```typescript
-class ActionEngine {
-  async execute(action: Action): Promise<void> {
-    switch (action.type) {
-      case 'spotlight':
-        this.executeSpotlight(action); // Fire-and-forget
-        return;
-      case 'speech':
-        return this.executeSpeech(action); // Synchronous
-      // ...
-    }
+// Workers-compatible structured generation
+async function* generateResponse(request: ChatRequest): AsyncGenerator<Event> {
+  const response = await ai.generate({
+    model: request.model,
+    prompt: buildPrompt(request),
+    responseFormat: { type: 'json_object' },
+  });
+  
+  const parser = createParserState();
+  for await (const chunk of response.textStream) {
+    const result = parseChunk(parser, chunk);
+    yield* result.textChunks.map(c => ({ type: 'text_delta', content: c }));
+    yield* result.actions.map(a => ({ type: 'action', ...a }));
   }
 }
 ```
 
-### Slide Renderer Architecture
+### 7.2 Incremental JSON Streaming Parser
 
-**Canvas-based Editor** (`components/slide-renderer/`):
-- Fork of PPTist presentation editor
-- Real-time element manipulation (text, image, shape, table, chart, latex, video)
-- SVG-based rendering with interactive editing
-- Theme system with gradients, shadows, outlines
-- Export to PowerPoint via customized `pptxgenjs`
+The `ParserState` + `parseChunk` pattern in `stateless-generate.ts`:
+- Accumulates raw text
+- Finds opening `[`
+- Uses `partial-json` to incrementally parse
+- Emits complete items as they appear
+- Streams partial text content for the last item
+- Handles `jsonrepair` for malformed LLM output
 
-**Element Types**:
-```typescript
-enum ElementTypes {
-  TEXT = 'text',
-  IMAGE = 'image',
-  SHAPE = 'shape',
-  LINE = 'line',
-  CHART = 'chart',
-  TABLE = 'table',
-  LATEX = 'latex',
-  VIDEO = 'video',
-  AUDIO = 'audio',
-}
-```
+**Port:** This is framework-agnostic and can be directly ported. Dependencies are just `partial-json` and `jsonrepair`.
 
-### Roundtable Component
+### 7.3 Director-Orchestrator Pattern
 
-**2,094 lines** of interactive UI (`components/roundtable/index.tsx`):
-- Multi-agent discussion interface
-- Audio indicators for speaking agents
-- Presentation speech overlay
-- Proactive discussion cards
-- Playback controls (pause, resume, speed)
-- Microphone input for user participation
-- Thinking state visualization
+The separation of "director" (meta-agent that decides) and "agents" (content generators) is clean:
+- Director never speaks to users
+- Director maintains conversation summary, agent response history, whiteboard ledger
+- Each agent gets a scoped prompt with their persona + scene context
 
-**Key UI Patterns**:
-1. **Animated Transitions**: Motion animations for agent switching
-2. **Audio Visualization**: Real-time audio level indicators
-3. **Responsive Layout**: Adapts to different screen sizes
-4. **Accessibility**: Keyboard shortcuts, screen reader support
-5. **Internationalization**: Chinese/English support via i18n hooks
+**Port:** Implement as a simple stateful loop on Workers. No LangGraph needed.
 
-### Real-time Features
+### 7.4 Playback Engine State Machine
 
-**TTS Integration**:
-- Multiple providers: OpenAI, ElevenLabs, Azure, Browser-native
-- Per-agent voice configuration
-- Speed/volume controls
-- Browser-native TTS with Chrome bug workarounds
+The `PlaybackEngine` class with explicit states and transitions:
+- Clean state machine: `idle | playing | paused | live`
+- Action execution with blocking semantics (sync actions wait for completion)
+- Audio playback integration with Web Speech API fallback
+- Progress persistence for resume-on-refresh
 
-**WebSocket/SSE**:
-- Server-Sent Events for streaming agent responses
-- Heartbeat mechanism (15s intervals) to prevent connection timeout
-- AbortController integration for cancellation
+**Port:** Can be implemented as a Zustand store with effects, or as a vanilla JS class.
 
-**Media Generation**:
-- Image providers: Grok, Qwen, Seedream
-- Video providers: Kling, Veo, Seedance
-- Async job polling with progress tracking
+### 7.5 Proactive Discussion Trigger
 
-## Content Generation Pipeline
+The `TriggerEvent` + `ProactiveCard` pattern:
+- During playback, when a `discussion` action fires, a card appears
+- User can "Listen" (join discussion) or "Skip" (continue playback)
+- This is the key interactive element that makes the classroom feel alive
 
-### Two-Stage Generation
+**TTRPG adaptation:** NPCs can proactively approach the player:
+- Guard stops you: "Halt! What's your business?"
+- Merchant waves you over: "Come see my wares!"
+- Companion suggests: "Maybe we should check that door..."
 
-**Stage 1: Outline Generation** (`lib/generation/outline-generator.ts`):
-```
-User Requirements → AI Analysis → Scene Outlines (JSON)
-```
-
-**Stage 2: Scene Generation** (`lib/generation/scene-generator.ts`):
-```
-Scene Outline → Content Generation → Actions Generation → Full Scene
-```
-
-### Prompt System
-
-**Template-based Prompts** (`lib/generation/prompts/`):
-```
-templates/
-├── requirements-to-outlines/
-│   ├── system.md
-│   └── user.md
-├── slide-content/
-│   ├── system.md
-│   └── user.md
-├── slide-actions/
-│   ├── system.md
-│   └── user.md
-├── quiz-content/
-│   ├── system.md
-│   └── user.md
-└── ...
-```
-
-**Prompt Building**:
-```typescript
-const prompts = buildPrompt(PROMPT_IDS.REQUIREMENTS_TO_OUTLINES, {
-  requirement: requirements.requirement,
-  language: requirements.language,
-  pdfContent: pdfText ? pdfText.substring(0, MAX_PDF_CONTENT_CHARS) : 'None',
-  availableImages: availableImagesText,
-  userProfile: userProfileText,
-  mediaGenerationPolicy,
-  researchContext: options?.researchContext || 'None',
-  teacherContext: options?.teacherContext || '',
-});
-```
-
-### Scene Types
-
-1. **Slide Scenes**:
-   - Canvas-based presentations
-   - Rich media elements (images, videos, charts, LaTeX)
-   - Animations and transitions
-   - Export to PowerPoint
-
-2. **Quiz Scenes**:
-   - Single/multiple choice, short answer
-   - Real-time AI grading
-   - Answer analysis and feedback
-   - Points system
-
-3. **Interactive Scenes**:
-   - HTML-based simulations
-   - Physics engines, flowcharts, experiments
-   - Iframe embedding with communication
-
-4. **PBL Scenes** (Project-Based Learning):
-   - Role selection (manager, designer, developer, etc.)
-   - Issue board with milestones
-   - Multi-agent collaboration
-   - Deliverable tracking
-
-### Media Generation Pipeline
-
-**Placeholder System**:
-```typescript
-// In outlines: "gen_img_1", "gen_vid_1"
-// During generation: Replace with actual media URLs
-const result = uniquifyMediaElementIds(enriched);
-```
-
-**Async Job Processing**:
-- Media generation jobs submitted to queue
-- Polling API for completion status
-- Fallback to placeholder images
-- Progress tracking with callbacks
-
-## TTRPG Adaptation Blueprint
-
-### DM's Game Master Console
-
-**Core Components**:
-
-1. **Scene Management**:
-   ```typescript
-   // Adapted from OpenMAIC's Stage/Scene system
-   interface GameScene {
-     id: string;
-     type: 'combat' | 'social' | 'exploration' | 'puzzle';
-     title: string;
-     content: SceneContent;
-     npcs: NPCConfig[];
-     triggers: Trigger[];
-     music?: string; // Background music URL
-     lighting?: 'bright' | 'dim' | 'dark';
-   }
-   ```
-
-2. **NPC Control System**:
-   ```typescript
-   // Adapted from AgentRegistry
-   interface NPCConfig {
-     id: string;
-     name: string;
-     race: string;
-     class?: string;
-     stats: { str, dex, con, int, wis, cha };
-     personality: string; // Agent persona
-     voice: VoiceConfig;
-     portrait: string; // Avatar image
-     allowedActions: NPC_ACTION[];
-     initiative?: number;
-     hp: { current: number; max: number };
-     conditions: Condition[];
-   }
-   ```
-
-3. **Combat Tracker**:
-   ```typescript
-   // Adapted from LangGraph Director
-   class CombatDirector {
-     private graph: StateGraph<CombatState>;
-     
-     async nextTurn(): Promise<TurnResult> {
-       // Initiative order management
-       // Action resolution
-       // Status effect updates
-     }
-   }
-   ```
-
-4. **Battle Map**:
-   ```typescript
-   // Adapted from Whiteboard component
-   interface BattleMap {
-     grid: { size: number; type: 'square' | 'hex' };
-     tokens: MapToken[];
-     fogOfWar: FogArea[];
-     layers: MapLayer[]; // Terrain, objects, tokens
-   }
-   ```
-
-### Player's Game Interface
-
-**Core Components**:
-
-1. **Character Sheet**:
-   ```typescript
-   // Adapted from SlideRenderer for interactive character sheets
-   interface CharacterSheet {
-     basicInfo: { name, race, class, level, background };
-     abilities: { str, dex, con, int, wis, cha };
-     skills: Skill[];
-     inventory: Item[];
-     spells: Spell[];
-     features: Feature[];
-     // Interactive elements with real-time updates
-   }
-   ```
-
-2. **Dice Roller**:
-   ```typescript
-   // Integrated into ActionEngine
-   interface DiceRollAction {
-     type: 'roll_dice';
-     dice: string; // "2d20+5"
-     advantage?: boolean;
-     disadvantage?: boolean;
-     forCheck?: 'attack' | 'save' | 'skill' | 'ability';
-     targetDC?: number;
-   }
-   ```
-
-3. **Action Menu**:
-   ```typescript
-   // Adapted from Roundtable component
-   interface ActionMenu {
-     combatActions: CombatAction[];
-     skillActions: SkillAction[];
-     spellActions: SpellAction[];
-     itemActions: ItemAction[];
-     // Real-time availability based on character state
-   }
-   ```
-
-4. **Real-time Updates**:
-   - HP changes via SSE
-   - Condition notifications
-   - Initiative order display
-   - Chat with other players/DM
-
-### Spectator's Viewing Mode
-
-**Core Components**:
-
-1. **Live Game Stream**:
-   ```typescript
-   // Adapted from PlaybackEngine
-   class SpectatorView {
-     private engine: PlaybackEngine;
-     private scenes: GameScene[];
-     private currentView: 'dm' | 'player' | 'map' | 'overview';
-     
-     switchView(view: string): void {
-       // Switch between different perspectives
-     }
-   }
-   ```
-
-2. **Interactive Slides**:
-   - Scene descriptions with visuals
-   - NPC portraits and bios
-   - Location maps
-   - Item illustrations
-
-3. **Animations and Effects**:
-   - Spell effects (particle systems)
-   - Combat animations
-   - Environmental effects (rain, fog, lighting)
-   - Sound effects integration
-
-4. **Chat Overlay**:
-   - Live transcription of dialogue
-   - Emote reactions
-   - Polls and audience interaction
-   - Highlight important moments
-
-## StudyLog.ai Adaptation Blueprint
-
-### Interactive Study Sessions
-
-**Core Components**:
-
-1. **Generated Study Slides**:
-   ```typescript
-   // Direct port from OpenMAIC's slide generation
-   interface StudySlide {
-     topic: string;
-     difficulty: 'beginner' | 'intermediate' | 'advanced';
-     content: SlideContent;
-     keyPoints: string[];
-     examples: Example[];
-     practiceQuestions: QuizQuestion[];
-   }
-   ```
-
-2. **Quiz/Flashcard Mode**:
-   ```typescript
-   // Enhanced from OpenMAIC's quiz system
-   interface FlashcardDeck {
-     id: string;
-     title: string;
-     subject: string;
-     cards: Flashcard[];
-     spacedRepetition: boolean;
-     masteryTracking: MasteryStats;
-   }
-   
-   interface Flashcard {
-     front: string; // Question or term
-     back: string; // Answer or definition
-     hints: string[];
-     mnemonics: string[];
-     difficulty: number; // 1-5
-     lastReviewed: Date;
-     nextReview: Date;
-   }
-   ```
-
-3. **Collaborative Study Rooms**:
-   ```typescript
-   // Multi-user adaptation of Roundtable
-   interface StudyRoom {
-     id: string;
-     topic: string;
-     participants: StudyParticipant[];
-     whiteboard: StudyWhiteboard;
-     chat: StudyChat;
-     sharedResources: Resource[];
-     studyPlan: StudyPlan;
-   }
-   ```
-
-### Animation System for Learning
-
-**Educational Animations**:
-1. **Step-by-Step Explanations**:
-   - Math problem solving with whiteboard animations
-   - Science concept visualizations
-   - Language grammar diagrams
-   - Historical timeline animations
-
-2. **Interactive Simulations**:
-   - Physics experiments (pendulum, projectile motion)
-   - Chemistry molecule builders
-   - Biology cell animations
-   - Economics supply/demand curves
-
-3. **Memory Aids**:
-   - Mnemonic animations
-   - Concept mapping with animated connections
-   - Story-based learning with character animations
-   - Rhythm-based memorization (music + visuals)
-
-### Adaptive Learning Engine
-
-**Core Components**:
-```typescript
-interface AdaptiveLearningEngine {
-  // Track student performance
-  trackPerformance(topic: string, score: number, timeSpent: number): void;
-  
-  // Adjust difficulty
-  getNextTopic(currentMastery: number): string;
-  
-  // Generate personalized content
-  generatePersonalizedContent(
-    studentProfile: StudentProfile,
-    learningGoals: string[]
-  ): PersonalizedContent;
-  
-  // Provide feedback
-  getFeedback(
-    answers: Answer[],
-    studentStrengths: string[],
-    studentWeaknesses: string[]
-  ): Feedback;
-}
-```
-
-## Specific Code Patterns to Steal
-
-### 1. LangGraph Director Pattern
-
-**File**: `/tmp/OpenMAIC/lib/orchestration/director-graph.ts`
-
-**Key Pattern**: Unified graph for single/multi-agent with conditional edges
+### 7.6 Agent Registry + Config System
 
 ```typescript
-// Worth stealing for TTRPG initiative tracking
-export function createOrchestrationGraph() {
-  const graph = new StateGraph(OrchestratorState)
-    .addNode('director', directorNode)
-    .addNode('agent_generate', agentGenerateNode)
-    .addEdge(START, 'director')
-    .addConditionalEdges('director', directorCondition, {
-      agent_generate: 'agent_generate',
-      [END]: END,
-    })
-    .addEdge('agent_generate', 'director');
-
-  return graph.compile();
-}
+// Zustand store for agent configurations
+const useAgentRegistry = create((set, get) => ({
+  agents: new Map<string, AgentConfig>(),
+  getAgent: (id: string) => get().agents.get(id),
+  setAgent: (config: AgentConfig) => { ... },
+  removeAgent: (id: string) => { ... },
+}));
 ```
 
-### 2. Stateless SSE Streaming
+Clean separation of agent identity from orchestration logic. Port directly.
 
-**File**: `/tmp/OpenMAIC/app/api/chat/route.ts`
-
-**Key Pattern**: Heartbeat mechanism to prevent connection timeout
+### 7.7 SSE Heartbeat Pattern
 
 ```typescript
-// Heartbeat: periodically send SSE comments
 const HEARTBEAT_INTERVAL_MS = 15_000;
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 const startHeartbeat = () => {
-  stopHeartbeat();
   heartbeatTimer = setInterval(() => {
-    try {
-      writer.write(encoder.encode(`:heartbeat\n\n`)).catch(() => stopHeartbeat());
-    } catch {
-      stopHeartbeat();
-    }
+    writer.write(encoder.encode(`:heartbeat\n\n`));
   }, HEARTBEAT_INTERVAL_MS);
 };
 ```
 
-### 3. Action Engine Pattern
-
-**File**: `/tmp/OpenMAIC/lib/action/engine.ts`
-
-**Key Pattern**: Unified execution layer with fire-and-forget vs synchronous actions
-
-```typescript
-class ActionEngine {
-  async execute(action: Action): Promise<void> {
-    // Auto-open whiteboard if a draw/clear/delete action is attempted
-    if (action.type.startsWith('wb_') && action.type !== 'wb_open' && action.type !== 'wb_close') {
-      await this.ensureWhiteboardOpen();
-    }
-
-    switch (action.type) {
-      case 'spotlight':
-        this.executeSpotlight(action); // Fire-and-forget
-        return;
-      case 'speech':
-        return this.executeSpeech(action); // Synchronous
-      // ...
-    }
-  }
-}
-```
-
-### 4. Zustand Store with IndexedDB
-
-**File**: `/tmp/OpenMAIC/lib/store/stage.ts`
-
-**Key Pattern**: Debounced auto-save with IndexedDB persistence
-
-```typescript
-// Debounced version of saveToStorage
-const debouncedSave = debounce(() => {
-  useStageStore.getState().saveToStorage();
-}, 500);
-
-// Save method
-saveToStorage: async () => {
-  const { stage, scenes, currentSceneId, chats } = get();
-  if (!stage?.id) return;
-  
-  try {
-    const { saveStageData } = await import('@/lib/utils/stage-storage');
-    await saveStageData(stage.id, { stage, scenes, currentSceneId, chats });
-  } catch (error) {
-    log.error('Failed to save to storage:', error);
-  }
-},
-```
-
-### 5. Roundtable UI Component
-
-**File**: `/tmp/OpenMAIC/components/roundtable/index.tsx`
-
-**Key Pattern**: Complex interactive UI with multiple states and animations
-
-```typescript
-// Audio indicator pattern
-const AudioIndicator = ({ state, agentId }: { state: AudioIndicatorState; agentId?: string }) => {
-  const bars = Array.from({ length: 8 }, (_, i) => (
-    <motion.div
-      key={i}
-      className="w-1 bg-current rounded-full"
-      animate={{
-        height: state === 'speaking' ? `${20 + Math.random() * 30}%` : '20%',
-      }}
-      transition={{ duration: 0.2, delay: i * 0.05 }}
-    />
-  ));
-  return <div className="flex items-end gap-0.5 h-6">{bars}</div>;
-};
-```
-
-### 6. Browser TTS with Chrome Bug Workaround
-
-**File**: `/tmp/OpenMAIC/lib/playback/engine.ts`
-
-**Key Pattern**: Sentence-level chunking to avoid Chrome's 15s cutoff
-
-```typescript
-private splitIntoChunks(text: string): string[] {
-  // Split on sentence-ending punctuation (Latin + CJK) and newlines
-  const chunks = text
-    .split(/(?<=[.!?。！？\n])\s*/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  return chunks.length > 0 ? chunks : [text];
-}
-
-private playBrowserTTSChunk(): Promise<void> {
-  if (this.browserTTSChunkIndex >= this.browserTTSChunks.length) {
-    // All chunks done
-    this.browserTTSActive = false;
-    this.callbacks.onSpeechEnd?.();
-    if (this.mode === 'playing') this.processNext();
-    return;
-  }
-  // ... play current chunk
-}
-```
-
-### 7. Prompt Template System
-
-**File**: `/tmp/OpenMAIC/lib/generation/prompts/`
-
-**Key Pattern**: Organized prompt templates with variable substitution
-
-```typescript
-// Template structure
-templates/slide-content/
-├── system.md
-└── user.md
-
-// System prompt example
-export const slideContentSystem = `You are an AI teaching assistant creating educational slides...
-
-## Slide Structure Guidelines
-- Title: Clear and concise
-- Content: 3-5 bullet points maximum
-- Visuals: Include relevant images/charts
-- Examples: Real-world applications
-
-## JSON Output Format
-{
-  "title": "string",
-  "content": {
-    "canvas": {
-      "elements": [
-        {
-          "id": "text_1",
-          "type": "text",
-          "content": "<p>...</p>"
-        }
-      ]
-    }
-  }
-}`;
-```
-
-## Integration Ideas for log-origin
-
-### 1. DMlog.ai Integration
-
-**Architecture Mapping**:
-```
-OpenMAIC Component → DMlog.ai Equivalent
-─────────────────────────────────────────
-StageStore → CampaignStore
-Scene → GameScene (combat/social/exploration)
-AgentRegistry → CharacterRegistry (PCs/NPCs)
-Director Graph → Initiative Tracker
-Whiteboard → Battle Map
-SlideRenderer → Scene Visualizer
-Roundtable → Game Chat Interface
-ActionEngine → Game Mechanics Engine
-```
-
-**Implementation Steps**:
-1. **Phase 1**: Port Zustand stores and IndexedDB persistence
-2. **Phase 2**: Adapt LangGraph director for initiative tracking
-3. **Phase 3**: Extend Whiteboard for battle maps with grid/tokens
-4. **Phase 4**: Create TTRPG-specific actions (roll_dice, apply_damage, etc.)
-5. **Phase 5**: Integrate character sheet management
-6. **Phase 6**: Add rule system integration (D&D 5e, Pathfinder, etc.)
-
-### 2. StudyLog.ai Integration
-
-**Architecture Mapping**:
-```
-OpenMAIC Component → StudyLog.ai Equivalent
-────────────────────────────────────────────
-Generation Pipeline → Study Material Generator
-Quiz System → Flashcard/Test System
-Interactive Scenes → Educational Simulations
-PBL System → Study Group Projects
-Roundtable → Study Group Discussion
-Whiteboard → Collaborative Note-taking
-SlideRenderer → Study Note Visualizer
-```
-
-**Implementation Steps**:
-1. **Phase 1**: Port slide generation for study notes
-2. **Phase 2**: Enhance quiz system with spaced repetition
-3. **Phase 3**: Create subject-specific templates (math, science, language)
-4. **Phase 4**: Add collaborative study rooms
-5. **Phase 5**: Integrate with existing educational resources
-6. **Phase 6**: Add progress tracking and analytics
-
-### 3. Shared Infrastructure
-
-**Core Services to Build**:
-1. **Multi-User Real-time System**: WebSocket/SSE for live collaboration
-2. **Media Generation Service**: Images/videos for both TTRPG and education
-3. **Voice Synthesis Service**: Character voices and narration
-4. **Rule Engine**: Game mechanics and educational content validation
-5. **Content Database**: Shared repository of scenes, characters, study materials
-
-**Technical Stack Decisions**:
-- **Frontend**: Keep React/Next.js for consistency
-- **State Management**: Zustand with IndexedDB (proven in OpenMAIC)
-- **Real-time**: SSE for streaming, consider WebSocket for bi-directional
-- **Backend**: Next.js API routes + separate microservices for heavy tasks
-- **Database**: PostgreSQL for relational data, Redis for caching
-- **Media**: Cloud storage (S3-compatible) with CDN
-
-## Risk Assessment
-
-### What's Complex (High Risk)
-
-1. **LangGraph Integration**:
-   - Learning curve for state machine design
-   - Debugging complex graph flows
-   - Performance optimization for real-time
-
-2. **Canvas-based Slide Renderer**:
-   - Complex SVG manipulation
-   - Performance with many elements
-   - Cross-browser compatibility issues
-
-3. **Multi-User Real-time Sync**:
-   - Conflict resolution
-   - Network latency handling
-   - Offline support and sync
-
-4. **Media Generation Pipeline**:
-   - Cost management (AI API calls)
-   - Quality control
-   - Fallback strategies
-
-### What's Moderate Risk
-
-1. **Zustand Store Architecture**:
-   - Well-documented pattern
-   - Proven in OpenMAIC
-   - Need careful design for TTRPG-specific state
-
-2. **Action Engine Pattern**:
-   - Clear separation of concerns
-   - Extensible for new action types
-   - Testing complexity
-
-3. **SSE Streaming**:
-   - Established pattern in OpenMAIC
-   - Heartbeat mechanism proven
-   - Need error handling improvements
-
-4. **Whiteboard Component**:
-   - SVG-based drawing works well
-   - Need extensions for TTRPG (grid, tokens)
-   - Performance with many elements
-
-### What's Easy (Low Risk)
-
-1. **Prompt Template System**:
-   - Simple file-based organization
-   - Easy to adapt for TTRPG/education
-   - Well-structured in OpenMAIC
-
-2. **Component Architecture**:
-   - Clear separation (ui, components, lib)
-   - Reusable patterns
-   - Good TypeScript support
-
-3. **Build/Deployment Setup**:
-   - pnpm workspace proven
-   - Vercel deployment straightforward
-   - Docker support available
-
-4. **Internationalization**:
-   - i18n hooks in place
-   - Easy to extend
-   - Chinese/English support
-
-### What's Not Worth Porting
-
-1. **PPT Export** (`packages/pptxgenjs`):
-   - TTRPG doesn't need PowerPoint export
-   - StudyLog might want PDF/HTML instead
-   - Heavy dependency with complex code
-
-2. **MathML to OMML Conversion** (`packages/mathml2omml`):
-   - Specific to Office integration
-   - Not needed for TTRPG
-   - StudyLog might need LaTeX instead
-
-3. **Some Media Providers**:
-   - China-specific providers (Doubao, Bailian)
-   - Expensive commercial providers
-   - Focus on open-source/affordable options
-
-4. **Legacy Code Paths**:
-   - Old Vercel AI SDK tool calls
-   - Deprecated session management
-   - Unused experimental features
-
-## Conclusion
-
-OpenMAIC provides a **goldmine of patterns and architectures** for log-origin's TTRPG and educational platforms. The key takeaways:
-
-### Strengths to Emulate:
-1. **Multi-Agent Orchestration**: LangGraph-based director system is perfect for TTRPG initiative tracking
-2. **Real-time Interactive UI**: Canvas-based rendering with live effects translates well to game visuals
-3. **Content Generation Pipeline**: Two-stage generation adaptable for both game scenes and study materials
-4. **State Management**: Robust Zustand + IndexedDB system for session persistence
-5. **Extensibility**: Plugin architecture for easy feature addition
-
-### Adaptation Strategy:
-1. **Start with Core Infrastructure**: Zustand stores, action engine, SSE streaming
-2. **Adapt LangGraph for TTRPG**: Director → Initiative tracker, agents → characters
-3. **Extend Whiteboard for Battle Maps**: Grid system, tokens, fog of war
-4. **Create Domain-Specific Actions**: TTRPG mechanics, educational interactions
-5. **Build on Proven Patterns**: Prompt templates, media generation, real-time updates
-
-### Recommended Implementation Order:
-1. **Phase 1**: Infrastructure (stores, API, basic UI)
-2. **Phase 2**: Core gameplay (character sheets, dice rolling, basic combat)
-3. **Phase 3**: Advanced features (battle maps, spell effects, rule integration)
-4. **Phase 4**: StudyLog adaptation (slide generation, quizzes, collaboration)
-5. **Phase 5**: Polish and optimization (performance, UX, mobile support)
-
-OpenMAIC demonstrates that **complex interactive AI systems are buildable** with modern web technologies. By adapting its patterns rather than copying wholesale, log-origin can create innovative platforms for both TTRPG gaming and interactive learning.
+SSE comments (`:heartbeat\n\n`) keep the connection alive through proxies. Essential for long-running generation on Workers.
 
 ---
 
-**File Count**: 500+ TypeScript/React files  
-**Total Lines**: ~50,000+ lines of code  
-**Key Insights**: 28+ action types, unified state machine, real-time SSE, extensible architecture  
-**Adaptation Potential**: Very high for both TTRPG and educational applications
+## 8. Frontend Component Architecture
+
+### 8.1 Component Tree
+
+```
+app/page.tsx
+├── components/stage/
+│   ├── stage-toolbar.tsx      # Top bar: play/pause, scene nav, settings
+│   └── scene-panel.tsx        # Scene type switcher
+├── components/canvas/
+│   ├── canvas-area.tsx        # Main slide canvas with overlays
+│   └── canvas-toolbar.tsx     # Drawing/annotation tools
+├── components/roundtable/
+│   └── index.tsx              # Central interaction hub (28+ props)
+├── components/agent/
+│   ├── agent-avatar.tsx       # Agent avatar with status indicator
+│   ├── agent-bar.tsx          # Horizontal agent list
+│   └── agent-config-panel.tsx # Agent configuration form
+├── components/chat/
+│   ├── chat-area.tsx          # Message list with agent bubbles
+│   └── chat-session.tsx       # Session management
+├── components/audio/
+│   ├── speech-button.tsx      # TTS toggle button
+│   └── tts-config-popover.tsx # Voice/speed settings
+└── lib/stores/
+    ├── stage.ts               # Stage/scene state (Zustand)
+    ├── canvas.ts              # Canvas/whiteboard state
+    ├── settings.ts            # User preferences
+    └── agent-registry.ts      # Agent configurations 
+### 8.2 Zustand Store Pattern
+
+```typescript
+// Example: stage store
+const useStageStore = create<StageState>((set) => ({
+  stages: [],
+  currentStageId: null,
+  scenes: [],
+  currentSceneId: null,
+  mode: 'autonomous' as StageMode,
+  
+  setStages: (stages) => set({ stages }),
+  setCurrentScene: (id) => set({ currentSceneId: id }),
+  addScene: (scene) => set((s) => ({ scenes: [...s.scenes, scene] })),
+  updateScene: (id, patch) => set((s) => ({
+    scenes: s.scenes.map(sc => sc.id === id ? { ...sc, ...patch } : sc)
+  })),
+}));
+```
+
+Clean, flat stores with direct setters. No middleware complexity.
+
+### 8.3 AI Elements Library
+
+OpenMAIC includes a full `ai-elements/` component library (~30 components):
+- Canvas, panel, toolbar, message, reasoning, code-block, image, node, edge
+- Plan, task, queue, sources, suggestion, shimmer, loader
+- Connection, controls, conversation, checkpoint
+
+These are generic AI UI components. For TTRPG, we'd need:
+- Character card (replaces message bubble with character portrait + name)
+- Dice roller (new component)
+- Inventory panel (new component)
+- Map canvas (replace slide canvas)
+- Combat tracker (new component)
+- Initiative tracker (new component)
+
+---
+
+## 9. Generation Pipeline
+
+### 9.1 Classroom Generation Flow
+
+```
+User input (topic + optional documents)
+    ↓
+1. Generate Agent Profiles (/api/generate/agent-profiles)
+   → Teacher + 2-3 student NPCs based on topic
+    ↓
+2. Generate Scene Outlines (/api/generate/scene-outlines-stream)
+   → Streaming: [{title, type, description, agentIds}, ...]
+    ↓
+3. Generate Scene Content (per scene)
+   → slide: PPTist canvas JSON
+   → quiz: QuizQuestion[]
+   → interactive: HTML/URL
+   → pbl: Project config
+    ↓
+4. Generate Scene Actions (per scene)
+   → [{type, name, params}, ...] — playback actions
+```
+
+### 9.2 Action Generation Prompt
+
+The system prompt for action generation includes:
+- Agent persona and role
+- Allowed actions with full JSON schemas
+- Current scene content (slide elements with IDs)
+- Conversation context (summarized)
+- Whiteboard state (ledger of drawn elements)
+
+Key constraint: "Text is natural teacher speech, NOT meta-commentary"
+
+### 9.3 TTRPG Content Generation
+
+Adapt the pipeline for TTRPG:
+
+```
+User input (campaign premise, world, characters)
+    ↓
+1. Generate NPC Profiles
+   → Tavern keeper, quest giver, antagonist, companion
+    ↓
+2. Generate Scene Outlines
+   → [{title: "The Tavern", type: "scene", description: "...", npcs: ["keeper-1"]}, ...]
+    ↓
+3. Generate Scene Content
+   → scene: Location art + description + interactive elements
+   → encounter: Combat encounter with stat blocks
+   → dialogue: Dialogue tree with branching
+    ↓
+4. Generate Scene Actions
+   → Narration, NPC lines, ambient descriptions, trigger events
+```
+
+### 9.4 StudyLog Content Generation
+
+```
+User input (topic, difficulty, learning objectives)
+    ↓
+1. Generate Tutor Profiles
+   → Main tutor + optional study buddy agents
+    ↓
+2. Generate Scene Outlines
+   → [{title: "Introduction", type: "lecture"}, {title: "Practice", type: "quiz"}, ...]
+    ↓
+3. Generate Scene Content
+   → lecture: Educational slides
+   → practice: Adaptive quiz questions
+   → simulation: Interactive demo
+    ↓
+4. Generate Scene Actions
+   → Tutor narration, explanation actions, practice prompts
+```
+
+---
+
+## 10. TTRPG Adaptation Plan — DMlog.ai
+
+### 10.1 Architecture Changes from OpenMAIC
+
+| OpenMAIC | DMlog.ai | Change |
+|----------|----------|--------|
+| Stage → Classroom | Stage → Campaign | Rename |
+| Scene → Slide/Quiz | Scene → Location/Encounter | Different types |
+| Teacher → Lecturer | Teacher → Game Master | Role |
+| Student → Classmate | Student → NPC/Companion | Role |
+| Playback → Lecture | Playback → Session | Mode |
+| Quiz → Test | Quiz → Skill Check | Mechanics |
+| Whiteboard → Drawing | Whiteboard → Map/Notes | Purpose |
+
+### 10.2 DM Console (Game Master Interface)
+
+The DM console is essentially OpenMAIC's autonomous mode with added controls:
+
+```
+┌─────────────────────────────────────────────────┐
+│ DM Console — "The Forgotten Realm"              │
+├─────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────────────────────┐ │
+│ │ Scene       │ │ Narrative Stream             │ │
+│ │ Art Panel   │ │ DM: "You enter the tavern"  │ │
+│ │             │ │ NPC: "Welcome, stranger..."  │ │
+│ │ [Location   │ │ Player: "I order a drink"    │ │
+│ │  image]     │ │ DM: [dice roll] Success!     │ │
+│ │             │ │ Player: "I ask about the..."  │ │
+│ └─────────────┘ └─────────────────────────────┘ │
+│ ┌──────────────────────────────────────────────┐ │
+│ │ Controls: [Pause] [Speed] [Skip] [End Scene] │ │
+│ └──────────────────────────────────────────────┘ │
+│ ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
+│ │ NPCs     │ │ Players  │ │ World State       │  │
+│ │ (avatars)│ │ (status) │ │ (inventory, etc)  │  │
+│ └──────────┘ └──────────┘ └──────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+**Implementation:** Fork `roundtable/index.tsx`, replace teacher panel with scene art, add game-specific panels.
+
+### 10.3 Player Interface
+
+Players see a simplified version:
+
+```
+┌─────────────────────────────────────────────────┐
+│ Scene Art (location illustration)                │
+├─────────────────────────────────────────────────┤
+│ Narrative:                                       │
+│ "The guard eyes you suspiciously. 'State your   │
+│  business, traveler,' he grunts."                │
+│                                                  │
+│ [NPC: Guard — portrait] [NPC: Merchant]          │
+│                                                  │
+│ ┌──────────────────────────────────────────────┐ │
+│ │ > I show him my letter from the King         │ │
+│ │ > I try to sneak past him                    │ │
+│ │ > I bribe him with 5 gold                    │ │
+│ └──────────────────────────────────────────────┘ │
+│                                                  │
+│ 🎲 [Roll d20 +5] [Inventory] [Character Sheet]   │
+└─────────────────────────────────────────────────┘
+```
+
+**Implementation:** Simplified roundtable without teacher panel, with action buttons and dice roller.
+
+### 10.4 Spectator Mode
+
+Spectators watch the session in real-time without participating:
+
+```
+┌─────────────────────────────────────────────────┐
+│ 👁 Spectating: "The Forgotten Realm"             │
+├─────────────────────────────────────────────────┤
+│ [Scene art] [Animated speech bubbles]            │
+│                                                  │
+│ DM: "You enter the tavern..."                   │
+│ Guard NPC: "State your business!"               │
+│ Player: "I show my letter"                      │
+│ [🎲 Dice: 18 + 5 = 23 — Success!]              │
+│ DM: "The guard steps aside..."                  │
+│                                                  │
+│ [TTS narration] [Ambient audio]                  │
+│ [Auto-play with animations]                      │
+└─────────────────────────────────────────────────┘
+```
+
+**Key features:**
+- Auto-play with TTS narration
+- Animated dice rolls
+- Scene transitions with fade effects
+- Ambient audio (background music, SFX)
+- No input field (read-only)
+
+### 10.5 New Action Types for TTRPG
+
+```typescript
+// Extend OpenMAIC's Action union
+type TTRPGAction =
+  // Inherited from OpenMAIC
+  | SpeechAction
+  | SpotlightAction
+  | WbDrawTextAction
+  | DiscussionAction
+  // New TTRPG actions
+  | DiceRollAction
+  | SceneTransitionAction
+  | NPCAction
+  | AmbientAction
+  | InventoryAction
+  | StatChangeAction
+  | BranchChoiceAction
+  | CombatAction;
+
+interface DiceRollAction extends ActionBase {
+  type: 'dice_roll';
+  dice: string;       // "2d6+3", "d20", "1d8"
+  reason: string;     // "Persuasion check"
+  result?: number;    // Filled by client after roll
+  success?: boolean;  // Determined by DM
+}
+
+interface SceneTransitionAction extends ActionBase {
+  type: 'scene_transition';
+  sceneId: string;
+  description: string;  // Narration for transition
+  fadeIn?: boolean;
+}
+
+interface NPCAction extends ActionBase {
+  type: 'npc_appear' | 'npc_leave' | 'npc_emote';
+  agentId: string;
+  emote?: string;      // "smiles", "draws sword"
+}
+
+interface AmbientAction extends ActionBase {
+  type: 'ambient_play' | 'ambient_stop' | 'ambient_fade';
+  audioId: string;
+  volume?: number;     // 0-1
+  loop?: boolean;
+}
+
+interface BranchChoiceAction extends ActionBase {
+  type: 'branch_choice';
+  options: Array<{
+    id: string;
+    text: string;
+    requirement?: string;  // "Requires: Persuasion > 15"
+  }>;
+  timeout?: number;    // Seconds to choose (0 = no timeout)
+}
+
+interface CombatAction extends ActionBase {
+  type: 'combat_start' | 'combat_end' | 'combat_turn';
+  initiative?: number[];
+  currentTurn?: string;  // agentId or player
+}
+```
+
+---
+
+## 11. StudyLog Adaptation Plan — studylog.ai
+
+### 11.1 Study Session Flow
+
+```
+Student starts study session
+    ↓
+1. Select topic or upload materials
+    ↓
+2. AI generates study plan (outline)
+    ↓
+3. Interactive study scenes:
+   ├─ Lecture (AI tutor explains with slides)
+   ├─ Practice (quiz with adaptive difficulty)
+   ├─ Exploration (interactive simulation)
+   └─ Discussion (ask AI tutor questions)
+    ↓
+4. Summary + retention check
+    ↓
+5. Study room (persistent space for review)
+```
+
+### 11.2 Key Adaptations
+
+**Lecture Scenes:**
+- Same as OpenMAIC slides but with study-specific prompts
+- Tutor agent explains concepts with whiteboard annotations
+- Auto-generated study notes from lecture (OpenMAIC has `LectureNoteEntry` type)
+
+**Practice Scenes:**
+- Adaptive quiz: difficulty adjusts based on performance
+- Spaced repetition metadata: track when to review
+- Explanation mode: show step-by-step solution after wrong answer
+- Study mode: hide answers, test later
+
+**Study Room:**
+- Persistent space (Stage in OpenMAIC terms)
+- AI tutor available 24/7 for Q&A
+- Collaborative whiteboard for note-taking
+- Progress tracking (scenes completed, quiz scores)
+- Export to Anki/Notion (future)
+
+### 11.3 Minimal Changes Needed
+
+StudyLog is closer to OpenMAIC than TTRPG. Main changes:
+1. Add spaced repetition metadata to quiz questions
+2. Add study plan generation (outline → scheduled sessions)
+3. Add progress dashboard (retention rate, study streaks)
+4. Add export to external tools (Anki, Notion, Obsidian)
+5. Add study room persistence (save/load study sessions)
+
+---
+
+## 12. Integration Plan — What to Build First
+
+### 12.1 Phase 1: Foundation (Weeks 1-3) — Easy
+
+| Task | Effort | Depends on | Notes |
+|------|--------|-----------|-------|
+| Port `Action` types to log-origin | 0.5d | Nothing | Copy + extend for TTRPG |
+| Port `ParserState` + incremental JSON parser | 1d | Nothing | Direct port, framework-agnostic |
+| Port `DirectorState` + prompt builder | 1d | Action types | Simplify for Workers (no LangGraph) |
+| Implement stateless chat API on Workers | 2d | Director + parser | SSE via TransformStream |
+| Port `AgentConfig` + registry pattern | 0.5d | Nothing | Simple Zustand store |
+
+### 12.2 Phase 2: TTRPG Core (Weeks 3-6) — Medium
+
+| Task | Effort | Depends on | Notes |
+|------|--------|-----------|-------|
+| TTRPG action types (dice, combat, etc.) | 1d | Phase 1 types | Extend Action union |
+| DM console layout (fork roundtable) | 3d | Phase 1 | Simplified roundtable |
+| Player interface | 2d | DM console | Read-only spectator variant |
+| Dice roller component | 1d | Nothing | Animated 3D dice or 2D |
+| NPC management (appear/leave/emote) | 2d | Action types | Avatar + status |
+| Scene transitions | 1d | Action types | Fade, slide animations |
+| TTS narration for spectator mode | 2d | OpenAI TTS API | Stream + play |
+
+### 12.3 Phase 3: StudyLog Core (Weeks 3-6) — Medium
+
+| Task | Effort | Depends on | Notes |
+|------|--------|-----------|-------|
+| Study session generation pipeline | 3d | Phase 1 | Adapt outline → scene pipeline |
+| AI tutor agent persona | 0.5d | Agent registry | Configure tutor agent |
+| Quiz with adaptive difficulty | 2d | Phase 1 quiz | Score tracking + difficulty ramp |
+| Study progress dashboard | 2d | Quiz data | Scenes completed, scores |
+| Spaced repetition metadata | 1d | Quiz system | Review scheduling |
+
+### 12.4 Phase 4: Advanced (Weeks 6-10) — Complex
+
+| Task | Effort | Depends on | Notes |
+|------|--------|-----------|-------|
+| Combat system with initiative tracker | 5d | Phase 2 | Turn-based combat UI |
+| Branching narrative engine | 3d | Phase 2 | Choice trees + state tracking |
+| Ambient audio system | 3d | Phase 2 | BGM + SFX + crossfade |
+| Multiplayer (real-time party) | 5d | Phase 2 | WebSocket + presence |
+| Study room persistence | 3d | Phase 3 | Save/load + R2 storage |
+| Export to Anki/Notion | 2d | Phase 3 | Card generation + API integration |
+| Spectator replay (recorded sessions) | 3d | Phase 2 | Store actions + replay engine |
+
+### 12.5 Effort Summary
+
+| Phase | Duration | Complexity | Value |
+|-------|----------|-----------|-------|
+| 1. Foundation | 3 weeks | Low | Shared by both products |
+| 2. TTRPG Core | 3 weeks | Medium | DMlog.ai MVP |
+| 3. StudyLog Core | 3 weeks | Medium | studylog.ai MVP |
+| 4. Advanced | 4 weeks | High | Differentiation |
+
+**Total: ~13 weeks for both MVPs**
+
+---
+
+## 13. Key Files Reference
+
+### 13.1 Must-Read Files (for implementation)
+
+| File | Lines | Why |
+|------|-------|-----|
+| `lib/types/action.ts` | ~180 | Action type system — extend for TTRPG |
+| `lib/types/chat.ts` | ~250 | Chat types + SSE events |
+| `lib/types/stage.ts` | ~130 | Stage/scene model |
+| `lib/orchestration/stateless-generate.ts` | ~435 | JSON array parser + streaming |
+| `lib/orchestration/director-graph.ts` | ~550 | Director orchestration logic |
+| `lib/orchestration/director-prompt.ts` | ~280 | Director prompt construction |
+| `lib/orchestration/prompt-builder.ts` | ~200 | Agent prompt construction |
+| `lib/orchestration/tool-schemas.ts` | ~150 | Action JSON schemas |
+| `lib/playback/engine.ts` | ~740 | Playback state machine |
+| `lib/playback/types.ts` | ~80 | Playback types |
+| `components/roundtable/index.tsx` | ~700 | Central UI component |
+| `app/api/chat/route.ts` | ~130 | Stateless chat endpoint |
+
+### 13.2 Dependencies to Note
+
+```json
+{
+  "@langchain/langgraph": "1.1+",      // Director graph — replace for Workers
+  "ai": "4.x",                          // Vercel AI SDK — structured generation
+  "partial-json": "^0.2.0",             // Incremental JSON parsing
+  "jsonrepair": "^3.x",                 // Malformed JSON repair
+  "zustand": "^5.x",                    // State management
+  "motion": "^12.x",                    // Animations (Framer Motion)
+  "@anthropic-ai/sdk": "latest",        // Anthropic provider
+  "pptxgenjs": "local",                 // PPT export (vendored)
+  "nanoid": "^5.x",                     // ID generation
+  "openai": "^4.x"                      // OpenAI provider
+}
+```
+
+**For Workers:** Drop LangGraph, use `ai` package (Workers-compatible), keep `partial-json` + `jsonrepair`, replace Zustand with vanilla signals or Svelte stores.
+
+---
+
+## 14. Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| LangGraph not Workers-compatible | Can't port director graph directly | Reimplement as simple loop (only ~50 LOC of logic) |
+| Structured JSON output unreliable | Agents produce invalid JSON | `jsonrepair` + fallback parsing + retry |
+| TTS latency ruins playback experience | Speech feels laggy | Pre-generate TTS during content generation; buffer ahead |
+| Multi-player race conditions | Concurrent dice rolls conflict | Server-authoritative state with CRDTs or OT |
+| OpenMAIC AGPL-3.0 license | Copyleft requirement | Study patterns/ideas (not code) are free; only port non-copyleft snippets or reimplement |
+| Canvas rendering performance on mobile | Slide/whiteboard slow on phones | Use CSS transforms (GPU-accelerated), lazy load scenes |
+
+### 14.1 License Note
+
+OpenMAIC is **AGPL-3.0**. This means:
+- If we fork/copy code, the derivative must also be AGPL-3.0
+- If we deploy server-side, we must offer source to users
+- **We can freely study patterns and reimplement** without licensing obligations
+- **We should NOT directly copy-paste** substantial code blocks into closed-source products
+- For open-source products (DMlog.ai, studylog.ai), AGPL is compatible if we accept the copyleft
+
+**Recommended approach:** Study the architecture, understand the patterns, reimplement in our own code with our own abstractions. Port small utility functions (parser, types) that are clearly generic.
+
+---
+
+## 15. Conclusion
+
+OpenMAIC is the best reference implementation we could ask for. It validates the multi-agent orchestration pattern with real production code, provides battle-tested type definitions, and demonstrates the critical insight: **interleaved action/text JSON arrays are superior to tool calling for interactive storytelling**.
+
+The three most valuable takeaways:
+1. **Stateless backend + client-side state** — Perfect for Workers, simple to scale
+2. **Director-orchestrator pattern** — Clean separation of "who decides" from "who acts"
+3. **Action system as the interface layer** — Agents don't call tools; they emit structured actions that the client interprets
+
+For DMlog.ai, the Roundtable component is 80% of the TTRPG player interface. For studylog.ai, the generation pipeline produces structured study materials automatically. The shared foundation (types, parser, director) serves both products.
+
+The 13-week roadmap is aggressive but achievable with the patterns from this codebase.
