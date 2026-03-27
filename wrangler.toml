@@ -8,7 +8,7 @@ directory = "./web"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "makerlog-db"
+database_name = "makerlog-ai"
 database_id = ""
 
 [[kv_namespaces]]
