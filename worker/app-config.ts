@@ -2,7 +2,7 @@
  * MakerLog.ai application configuration loader.
  * Loads personality, rules, theme, and templates from KV.
  */
-import type { Env } from '../../src/types.js';
+import type { Env } from '../src/types.js';
 
 export interface AppConfig {
   personality: string;
@@ -17,9 +17,9 @@ export interface AppConfig {
 export async function loadAppConfig(env: Env): Promise<AppConfig> {
   try {
     const [personality, rulesRaw, theme] = await Promise.all([
-      env.KV.get('config:personality') || '',
-      env.KV.get('config:rules') || '[]',
-      env.KV.get('config:theme') || '',
+      (await env.KV.get('config:personality')) || '',
+      (await env.KV.get('config:rules')) || '[]',
+      (await env.KV.get('config:theme')) || '',
     ]);
 
     let rules: any[] = [];
@@ -39,7 +39,7 @@ export async function loadAppConfig(env: Env): Promise<AppConfig> {
     const templateResults = await Promise.all(templateKeys.map(k => env.KV.get(k)));
     for (let i = 0; i < templateKeys.length; i++) {
       const key = templateKeys[i].replace('template:', '');
-      if (templateResults[i]) templates[key] = templateResults[i];
+      if (templateResults[i]) templates[key] = templateResults[i]!;
     }
 
     return { personality, rules, theme, templates };
