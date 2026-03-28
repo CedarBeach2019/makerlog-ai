@@ -4,8 +4,6 @@ import { Login } from './components/login.js';
 import { Chat } from './components/chat.js';
 import { Sidebar } from './components/sidebar.js';
 import { Settings } from './components/settings.js';
-import { NPCPanel } from './components/npc-panel.js';
-
 import { Analytics } from './components/analytics.js';
 // Global state
 export const authState = signal({ isLoggedIn: false, token: null, userId: null });
@@ -75,7 +73,6 @@ export default function App() {
           <${Sidebar} />
           <div class="sidebar-backdrop" onclick=${() => sidebarOpen.value = false}></div>
           <${Chat} />
-          <${NPCPanel} />
         </div>
       ` : html`<${Login} />`}
       <${Settings} />
