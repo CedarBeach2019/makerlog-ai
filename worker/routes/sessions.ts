@@ -151,14 +151,14 @@ sessions.get('/:id/export', async (c) => {
   // Markdown
   const lines = [
     `# ${session.summary || 'Untitled Session'}`, '',
-    `> Exported from DMlog.ai — ${new Date().toISOString()}`,
+    `> Exported from MakerLog.ai — ${new Date().toISOString()}`,
     `> Messages: ${session.message_count} | Created: ${session.created_at}`, '',
     '---', '',
   ];
   for (const m of msgs) {
     const t = m.created_at ? new Date(m.created_at).toLocaleString() : '';
     if (m.role === 'user') { lines.push(`### 👤 You${t ? ` — ${t}` : ''}`, '', m.content, ''); }
-    else if (m.role === 'assistant') { lines.push(`### 🏰 DM${t ? ` — ${t}` : ''}`, '', m.content, ''); }
+    else if (m.role === 'assistant') { lines.push(`### 🤖 MakerLog${t ? ` — ${t}` : ''}`, '', m.content, ''); }
     else { lines.push(`> *${m.content}*`, ''); }
   }
   return new Response(lines.join('\n'), {
