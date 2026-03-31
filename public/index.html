@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>makerlog.ai — Your Development Environment. In Your Repo.</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="logo">makerlog<span class="accent">.ai</span></a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#why">Why makerlog</a>
+        <a href="#start">Get Started</a>
+        <a href="app.html" class="cta-link">Open IDE</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>Your Development Environment.<br><span class="accent">In Your Repo.</span></h1>
+    <p class="subtitle">Fork. Configure. Code with AI. Deploy Anywhere.</p>
+    <div class="hero-actions">
+      <a href="#start" class="btn btn-primary">Get Started</a>
+      <a href="app.html" class="btn btn-secondary">Try the IDE</a>
+    </div>
+  </section>
+
+  <section class="terminal-demo">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="terminal-title">makerlog — agent session</span>
+      </div>
+      <div class="terminal-body">
+        <div class="line"><span class="prompt">$</span> cocapn start</div>
+        <div class="line output">Bridge loaded. Soul: makerlog-agent v2.1</div>
+        <div class="line output">Brain: 847 facts, 214 memories, 43 procedures</div>
+        <div class="line"><span class="prompt">$</span> <span class="typed" id="typed-text"></span><span class="cursor">|</span></div>
+        <div class="line output hidden" id="agent-response">
+          <span class="accent">agent:</span> Analyzing your auth module... Found a race condition in token refresh.
+          I'll patch it and add a test. One moment.
+        </div>
+        <div class="line output hidden" id="agent-done">
+          <span class="green">done:</span> Patched src/auth/refresh.ts + added tests/auth.refresh.test.ts
+          <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3 assertions passing. Ready to commit?
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="features">
+    <h2>Everything you need. Nothing you don't.</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">KEY</div>
+        <h3>BYOK</h3>
+        <p>Bring Your Own Key. Use OpenAI, Anthropic, DeepSeek, or run local models via Ollama. Your keys, your choice.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">RUN</div>
+        <h3>Multi-Runtime</h3>
+        <p>Local, Docker, Cloudflare Workers, or air-gapped. One codebase, every deployment target.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">AI</div>
+        <h3>Agent Intelligence</h3>
+        <p>Persistent memory across sessions. Your agent learns your codebase, your patterns, your decisions.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">MCP</div>
+        <h3>MCP / A2A Protocol</h3>
+        <p>Connect external tools via MCP. Coordinate agent fleets with A2A. Zero-dependency protocols.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">$</div>
+        <h3>Billing</h3>
+        <p>Track every token. Per-provider cost breakdown. Built-in metering so you know exactly what you spend.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&lt;/&gt;</div>
+        <h3>Open Source</h3>
+        <p>Full source on GitHub. MIT licensed. Fork it, extend it, self-host it. No vendor lock-in, ever.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="why" class="why-section">
+    <h2>Better than Claude Code because...</h2>
+    <div class="comparison-grid">
+      <div class="comparison-card">
+        <div class="comparison-label">repo-first</div>
+        <p>Your repo IS the agent. Not a cloud session that forgets. Git is your database. Clone it anywhere, your agent comes with it.</p>
+      </div>
+      <div class="comparison-card">
+        <div class="comparison-label">BYOK any provider</div>
+        <p>Not locked to one model. Route tasks to the best model for the job — GPT-4o for planning, Claude for writing, DeepSeek for refactoring.</p>
+      </div>
+      <div class="comparison-card">
+        <div class="comparison-label">deploy anywhere</div>
+        <p>Local machine, Docker container, Cloudflare edge, or fully air-gapped. Your agent runs where you need it.</p>
+      </div>
+      <div class="comparison-card">
+        <div class="comparison-label">your repo = your data</div>
+        <p>Every fact, memory, and procedure lives in Git. No cloud dependency for your agent's brain. You own it. Version it. Restore it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="start" class="getting-started">
+    <h2>Get Started in 60 Seconds</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <h3>Create your project</h3>
+          <div class="code-block"><code>npm create cocapn</code></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <h3>Set your API key</h3>
+          <div class="code-block"><code>cocapn secret set DEEPSEEK_API_KEY</code></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <h3>Start coding</h3>
+          <div class="code-block"><code>cocapn start --public ./my-site</code></div>
+        </div>
+      </div>
+    </div>
+    <div class="start-cta">
+      <a href="app.html" class="btn btn-primary">Open the IDE</a>
+      <p class="note">Or continue in your terminal. The IDE is optional — everything works from CLI.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-col">
+        <div class="logo">makerlog<span class="accent">.ai</span></div>
+        <p>Your repo is the agent.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Project</h4>
+        <a href="https://github.com/nicholasgriffintn/cocapn">GitHub</a>
+        <a href="app.html">IDE</a>
+        <a href="https://github.com/nicholasgriffintn/cocapn/blob/main/LICENSE">License (MIT)</a>
+      </div>
+      <div class="footer-col">
+        <h4>Docs</h4>
+        <a href="https://github.com/nicholasgriffintn/cocapn/tree/main/docs">Architecture</a>
+        <a href="https://github.com/nicholasgriffintn/cocapn/blob/main/CLAUDE.md">CLAUDE.md</a>
+        <a href="https://github.com/nicholasgriffintn/cocapn/issues">Issues</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Open source under MIT. Built with cocapn.</p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var typed = document.getElementById('typed-text');
+      var response = document.getElementById('agent-response');
+      var done = document.getElementById('agent-done');
+      var text = 'fix the race condition in auth/refresh.ts';
+      var i = 0;
+
+      function type() {
+        if (i < text.length) {
+          typed.textContent += text.charAt(i);
+          i++;
+          setTimeout(type, 50 + Math.random() * 40);
+        } else {
+          setTimeout(function () {
+            response.classList.remove('hidden');
+            setTimeout(function () {
+              done.classList.remove('hidden');
+            }, 2200);
+          }, 600);
+        }
+      }
+
+      setTimeout(type, 1200);
+    })();
+  </script>
+</body>
+</html>
