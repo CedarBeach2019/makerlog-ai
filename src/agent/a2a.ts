@@ -118,10 +118,10 @@ export class A2AProtocol {
       };
 
       // Store for transport layer pickup
-      this.pendingRequests.set(request.requestId, {
-        resolve: (resp) => responses.push(resp),
+      this.pendingRequests.set(request.requestId!, {
+        resolve: (resp: A2AResponse) => responses.push(resp),
         timer: setTimeout(() => {
-          this.pendingRequests.delete(request.requestId);
+          this.pendingRequests.delete(request.requestId!);
         }, this.requestTimeout),
       });
     }

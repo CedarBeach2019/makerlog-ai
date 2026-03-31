@@ -33,7 +33,7 @@ function parseToolCalls(
 ): ProviderResponse['toolUse'] {
   const choice = choices[0];
   if (!choice) return undefined;
-  const calls = choice.message?.tool_calls as
+  const calls = (choice.message as Record<string, unknown>)?.tool_calls as
     | Array<Record<string, unknown>>
     | undefined;
   if (!calls?.length) return undefined;

@@ -47,7 +47,7 @@ export class TelegramChannel {
       const msg = update.message;
       return {
         userId: String(msg.from?.id ?? msg.chat.id),
-        text: msg.text,
+        text: msg.text!,
         channel: 'telegram',
         metadata: {
           chatId: msg.chat.id,
@@ -63,12 +63,12 @@ export class TelegramChannel {
       const cb = update.callback_query;
       return {
         userId: String(cb.from.id),
-        text: cb.data,
+        text: cb.data!,
         channel: 'telegram',
         metadata: {
           callbackQueryId: cb.id,
-          chatId: cb.message?.chat.id ?? null,
-          username: cb.from.username ?? null,
+          chatId: cb.message?.chat?.id ?? null,
+          username: cb.from?.username ?? null,
         },
       };
     }

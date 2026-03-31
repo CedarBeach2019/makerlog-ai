@@ -28,7 +28,7 @@ export function normalizeTelegram(update: unknown): NormalizedMessage | null {
   if (!source) return null;
 
   const from = (message?.from ?? callback?.from) as Record<string, unknown> | undefined;
-  const chat = source.chat as Record<string, unknown> | undefined;
+  const chat = (source as Record<string, unknown>).chat as Record<string, unknown> | undefined;
 
   const text = (message?.text as string) ?? (callback?.data as string) ?? null;
   if (!text) return null;

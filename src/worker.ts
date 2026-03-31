@@ -12,6 +12,8 @@ import { TelegramChannel } from './channels/telegram.js';
 import { DiscordChannel } from './channels/discord.js';
 import { normalizeTelegram, normalizeDiscord } from './channels/normalize.js';
 import { BillingManager } from './billing/index.js';
+import { ProviderRegistry } from './providers/index.js';
+import type { ProviderConfig } from './providers/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +34,53 @@ interface Env {
   DEEPSEEK_API_KEY: string;
   GROQ_API_KEY: string;
   OLLAMA_HOST: string;
+}
+
+// ---------------------------------------------------------------------------
+// Provider resolution
+// ---------------------------------------------------------------------------
+
+function resolveProviderConfig(env: Env): ProviderConfig {
+  const explicit = env.COCAPN_PROVIDER;
+  if (explicit) {
+    const keyMap: Record<string, string | undefined> = {
+      anthropic: env.ANTHROPIC_API_KEY,
+      openai: env.OPENAI_API_KEY,
+      deepseek: env.DEEPSEEK_API_KEY,
+      groq: env.GROQ_API_KEY,
+      ollama: undefined,
+    };
+    const baseMap: Partial<Record<string, string>> = {
+      deepseek: 'https://api.deepseek.com/v1/chat/completions',
+      groq: 'https://api.groq.com/openai/v1/chat/completions',
+      ollama: env.OLLAMA_HOST ?? 'http://localhost:11434',
+    };
+    const modelMap: Record<string, string> = {
+      anthropic: 'claude-sonnet-4-20250514',
+      openai: 'gpt-4o',
+      deepseek: 'deepseek-chat',
+      groq: 'llama-3.1-70b-versatile',
+      ollama: 'llama3',
+    };
+    return {
+      provider: explicit as ProviderConfig['provider'],
+      apiKey: keyMap[explicit],
+      baseUrl: baseMap[explicit],
+      model: modelMap[explicit] ?? 'default',
+    };
+  }
+
+  // Auto-detect from env
+  if (env.ANTHROPIC_API_KEY) return { provider: 'anthropic', apiKey: env.ANTHROPIC_API_KEY, model: 'claude-sonnet-4-20250514' };
+  if (env.OPENAI_API_KEY) return { provider: 'openai', apiKey: env.OPENAI_API_KEY, model: 'gpt-4o' };
+  if (env.DEEPSEEK_API_KEY) return { provider: 'deepseek', apiKey: env.DEEPSEEK_API_KEY, model: 'deepseek-chat' };
+  if (env.GROQ_API_KEY) return { provider: 'groq', apiKey: env.GROQ_API_KEY, model: 'llama-3.1-70b-versatile' };
+
+  return {
+    provider: 'ollama',
+    baseUrl: env.OLLAMA_HOST ?? 'http://localhost:11434',
+    model: 'llama3',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -97,23 +146,43 @@ app.post('/api/chat', async (c) => {
   }
 
   return streamSSE(c, async (stream) => {
-    // TODO: Replace with actual LLM call via provider router
-    const words = body.message.split(' ');
-    for (let i = 0; i < words.length; i++) {
+    // Build provider config from environment
+    const config = resolveProviderConfig(c.env);
+    const registry = new ProviderRegistry(config);
+
+    const messages = (body.history ?? []).map((m) => ({
+      role: m.role as 'system' | 'user' | 'assistant' | 'tool',
+      content: m.content,
+    }));
+    messages.push({ role: 'user', content: body.message });
+
+    let totalTokens = 0;
+    let totalCost = 0;
+
+    try {
+      const chunks = registry.chatStream(messages);
+      for await (const chunk of chunks) {
+        if (chunk.type === 'text' && chunk.content) {
+          await stream.writeSSE({
+            event: 'token',
+            data: JSON.stringify({ content: chunk.content }),
+          });
+        }
+        if (chunk.type === 'done') {
+          break;
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       await stream.writeSSE({
-        event: 'token',
-        data: JSON.stringify({
-          content: (i > 0 ? ' ' : '') + words[i],
-          done: i === words.length - 1,
-        }),
+        event: 'error',
+        data: JSON.stringify({ error: msg }),
       });
-      // Simulate token latency
-      await stream.sleep(30);
     }
 
     await stream.writeSSE({
       event: 'done',
-      data: JSON.stringify({ totalTokens: words.length }),
+      data: JSON.stringify({ totalTokens, totalCost }),
     });
   });
 });
@@ -202,11 +271,11 @@ app.post('/api/webhooks/discord', async (c) => {
   }
 
   const dc = new DiscordChannel(c.env.DISCORD_APP_ID, c.env.DISCORD_BOT_TOKEN);
-  const message = dc.handleWebhook(body as Parameters<typeof dc.handleWebhook>[0]);
+  const message = await dc.handleWebhook(body as Parameters<typeof dc.handleWebhook>[0]);
 
   if (message) {
     // Defer the interaction so we have time to process
-    const token = message.metadata.interactionToken as string;
+    const token = (message.metadata as Record<string, unknown>).interactionToken as string | undefined;
     if (token) {
       // TODO: Route to agent core and respond via followup
       await dc.sendFollowup(token, `Processing: ${message.text}`);

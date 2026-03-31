@@ -10,7 +10,6 @@ import { createOpenAIProvider } from './openai.js';
 import type {
   ProviderConfig,
   Provider,
-  PRICING,
 } from './index.js';
 
 const DEEPSEEK_BASE = 'https://api.deepseek.com/v1/chat/completions';

@@ -3,8 +3,137 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>makerlog.ai — Your Development Environment. In Your Repo.</title>
+  <title>makerlog.ai — Your Development Environment. Living in Your Repo.</title>
+  <meta name="description" content="Repo-first AI development platform. BYOK, multi-runtime, open source. The repo IS the agent.">
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Tech stack badges */
+    .tech-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 28px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--bg-elevated);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.78rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .badge:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .badge .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    /* Comparison table */
+    .comparison-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.88rem;
+    }
+    .comparison-table th {
+      text-align: left;
+      padding: 12px 16px;
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+    .comparison-table th:first-child {
+      border-radius: 8px 0 0 0;
+    }
+    .comparison-table th:last-child {
+      border-radius: 0 8px 0 0;
+    }
+    .comparison-table td {
+      padding: 11px 16px;
+      border-top: 1px solid var(--bg-elevated);
+      color: var(--text);
+    }
+    .comparison-table tr:hover td {
+      background: rgba(0, 212, 170, 0.03);
+    }
+    .comparison-table .check { color: var(--accent); font-weight: 700; }
+    .comparison-table .cross { color: var(--text-muted); }
+    .comparison-table .partial { color: var(--orange); }
+
+    .table-wrapper {
+      overflow-x: auto;
+      background: var(--bg-surface);
+      border: 1px solid var(--bg-elevated);
+      border-radius: 12px;
+      max-width: 100%;
+    }
+
+    /* Animated terminal glow */
+    .terminal {
+      position: relative;
+    }
+    .terminal::after {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      right: -1px;
+      bottom: -1px;
+      border-radius: 13px;
+      background: linear-gradient(135deg, rgba(0,212,170,0.15), transparent 40%, transparent 60%, rgba(0,212,170,0.1));
+      z-index: -1;
+      animation: terminalGlow 4s ease-in-out infinite;
+    }
+    @keyframes terminalGlow {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    /* Animated typing line */
+    .terminal-body .typing-line {
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .terminal-body .typing-line .typed-text {
+      display: inline-block;
+      max-width: 0;
+      overflow: hidden;
+      vertical-align: bottom;
+      animation: typeExpand 3s steps(52) 1.2s forwards;
+    }
+    @keyframes typeExpand {
+      from { max-width: 0; }
+      to { max-width: 520px; }
+    }
+
+    /* Fade-in for response lines */
+    .terminal-body .line.fade-1 {
+      opacity: 0;
+      animation: fadeIn 0.5s ease 4.5s forwards;
+    }
+    .terminal-body .line.fade-2 {
+      opacity: 0;
+      animation: fadeIn 0.5s ease 6.5s forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
 <body>
   <nav>
@@ -12,7 +141,7 @@
       <a href="/" class="logo">makerlog<span class="accent">.ai</span></a>
       <div class="nav-links">
         <a href="#features">Features</a>
-        <a href="#why">Why makerlog</a>
+        <a href="#comparison">Compare</a>
         <a href="#start">Get Started</a>
         <a href="app.html" class="cta-link">Open IDE</a>
       </div>
@@ -20,11 +149,21 @@
   </nav>
 
   <section class="hero">
-    <h1>Your Development Environment.<br><span class="accent">In Your Repo.</span></h1>
+    <h1>Your Development Environment.<br><span class="accent">Living in Your Repo.</span></h1>
     <p class="subtitle">Fork. Configure. Code with AI. Deploy Anywhere.</p>
     <div class="hero-actions">
       <a href="#start" class="btn btn-primary">Get Started</a>
       <a href="app.html" class="btn btn-secondary">Try the IDE</a>
+    </div>
+    <div class="tech-badges">
+      <span class="badge"><span class="badge-dot" style="background:#89b4fa"></span>TypeScript</span>
+      <span class="badge"><span class="badge-dot" style="background:#f38ba8"></span>Hono</span>
+      <span class="badge"><span class="badge-dot" style="background:#fab387"></span>Cloudflare Workers</span>
+      <span class="badge"><span class="badge-dot" style="background:#a6e3a1"></span>OpenAI-compatible</span>
+      <span class="badge"><span class="badge-dot" style="background:#cba6f7"></span>Vite</span>
+      <span class="badge"><span class="badge-dot" style="background:#00d4aa"></span>BYOK</span>
+      <span class="badge"><span class="badge-dot" style="background:#f9e2af"></span>MCP / A2A</span>
+      <span class="badge"><span class="badge-dot" style="background:#89b4fa"></span>Docker</span>
     </div>
   </section>
 
@@ -40,12 +179,14 @@
         <div class="line"><span class="prompt">$</span> cocapn start</div>
         <div class="line output">Bridge loaded. Soul: makerlog-agent v2.1</div>
         <div class="line output">Brain: 847 facts, 214 memories, 43 procedures</div>
-        <div class="line"><span class="prompt">$</span> <span class="typed" id="typed-text"></span><span class="cursor">|</span></div>
-        <div class="line output hidden" id="agent-response">
+        <div class="line typing-line">
+          <span class="prompt">$</span> <span class="typed-text">fix the race condition in auth/refresh.ts</span><span class="cursor">|</span>
+        </div>
+        <div class="line output fade-1">
           <span class="accent">agent:</span> Analyzing your auth module... Found a race condition in token refresh.
           I'll patch it and add a test. One moment.
         </div>
-        <div class="line output hidden" id="agent-done">
+        <div class="line output fade-2">
           <span class="green">done:</span> Patched src/auth/refresh.ts + added tests/auth.refresh.test.ts
           <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3 assertions passing. Ready to commit?
         </div>
@@ -59,55 +200,122 @@
       <div class="feature-card">
         <div class="feature-icon">KEY</div>
         <h3>BYOK</h3>
-        <p>Bring Your Own Key. Use OpenAI, Anthropic, DeepSeek, or run local models via Ollama. Your keys, your choice.</p>
+        <p>Bring Your Own Key. Use Anthropic, OpenAI, DeepSeek, Groq, or run local models via Ollama. Your keys, your choice, your cost.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">RUN</div>
         <h3>Multi-Runtime</h3>
-        <p>Local, Docker, Cloudflare Workers, or air-gapped. One codebase, every deployment target.</p>
+        <p>Local, Docker, Cloudflare Workers, or air-gapped. One codebase, every deployment target. No cloud lock-in.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">AI</div>
         <h3>Agent Intelligence</h3>
-        <p>Persistent memory across sessions. Your agent learns your codebase, your patterns, your decisions.</p>
+        <p>Persistent memory across sessions. Your agent learns your codebase, your patterns, your decisions. It gets better every day.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">MCP</div>
         <h3>MCP / A2A Protocol</h3>
-        <p>Connect external tools via MCP. Coordinate agent fleets with A2A. Zero-dependency protocols.</p>
+        <p>Connect external tools via MCP. Coordinate agent fleets with A2A. Zero-dependency protocol implementations.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">$</div>
         <h3>Billing</h3>
-        <p>Track every token. Per-provider cost breakdown. Built-in metering so you know exactly what you spend.</p>
+        <p>Track every token. Per-provider cost breakdown. Built-in metering with optional billing so you know exactly what you spend.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">&lt;/&gt;</div>
         <h3>Open Source</h3>
-        <p>Full source on GitHub. MIT licensed. Fork it, extend it, self-host it. No vendor lock-in, ever.</p>
+        <p>Full source on GitHub. MIT licensed. Fork it, extend it, self-host it. No vendor lock-in, ever. The repo IS the product.</p>
       </div>
     </div>
   </section>
 
-  <section id="why" class="why-section">
+  <section id="comparison" class="why-section">
     <h2>Better than Claude Code because...</h2>
-    <div class="comparison-grid">
-      <div class="comparison-card">
-        <div class="comparison-label">repo-first</div>
-        <p>Your repo IS the agent. Not a cloud session that forgets. Git is your database. Clone it anywhere, your agent comes with it.</p>
-      </div>
-      <div class="comparison-card">
-        <div class="comparison-label">BYOK any provider</div>
-        <p>Not locked to one model. Route tasks to the best model for the job — GPT-4o for planning, Claude for writing, DeepSeek for refactoring.</p>
-      </div>
-      <div class="comparison-card">
-        <div class="comparison-label">deploy anywhere</div>
-        <p>Local machine, Docker container, Cloudflare edge, or fully air-gapped. Your agent runs where you need it.</p>
-      </div>
-      <div class="comparison-card">
-        <div class="comparison-label">your repo = your data</div>
-        <p>Every fact, memory, and procedure lives in Git. No cloud dependency for your agent's brain. You own it. Version it. Restore it.</p>
-      </div>
+    <div class="table-wrapper">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>makerlog.ai</th>
+            <th>Claude Code</th>
+            <th>Aider</th>
+            <th>Cursor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Paradigm</td>
+            <td class="check">Repo-first (repo IS the agent)</td>
+            <td class="partial">Tool-first (agent works on repo)</td>
+            <td class="partial">CLI-first (pairs with editor)</td>
+            <td class="partial">Editor-first (AI inside IDE)</td>
+          </tr>
+          <tr>
+            <td>LLM Provider</td>
+            <td class="check">BYOK — any provider</td>
+            <td class="cross">Anthropic only</td>
+            <td class="check">BYOK</td>
+            <td class="cross">Own models + BYOK</td>
+          </tr>
+          <tr>
+            <td>Runtime</td>
+            <td class="check">Local, Docker, Workers, Air-gapped</td>
+            <td class="cross">CLI only</td>
+            <td class="cross">CLI only</td>
+            <td class="cross">Desktop app only</td>
+          </tr>
+          <tr>
+            <td>Data Ownership</td>
+            <td class="check">Your repo, your Git</td>
+            <td class="cross">Cloud-hosted</td>
+            <td class="check">Local files</td>
+            <td class="cross">Cloud + local</td>
+          </tr>
+          <tr>
+            <td>Cost Model</td>
+            <td class="check">Your API key, your rate</td>
+            <td class="cross">Subscription</td>
+            <td class="check">Your API key</td>
+            <td class="cross">Subscription + usage</td>
+          </tr>
+          <tr>
+            <td>Persistent Memory</td>
+            <td class="check">Git-backed, confidence decay</td>
+            <td class="partial">Session-based</td>
+            <td class="cross">None</td>
+            <td class="partial">Project-level</td>
+          </tr>
+          <tr>
+            <td>Agent Protocols</td>
+            <td class="check">MCP + A2A built-in</td>
+            <td class="partial">MCP client</td>
+            <td class="cross">None</td>
+            <td class="cross">None</td>
+          </tr>
+          <tr>
+            <td>Web Interface</td>
+            <td class="check">Full IDE in browser</td>
+            <td class="cross">CLI only</td>
+            <td class="cross">CLI only</td>
+            <td class="check">Full IDE</td>
+          </tr>
+          <tr>
+            <td>Skill Injection</td>
+            <td class="check">Kung-Fu pattern</td>
+            <td class="cross">None</td>
+            <td class="cross">None</td>
+            <td class="partial">Custom instructions</td>
+          </tr>
+          <tr>
+            <td>Open Source</td>
+            <td class="check">Fully open (MIT)</td>
+            <td class="cross">Closed source</td>
+            <td class="check">Open source</td>
+            <td class="cross">Closed source</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
@@ -117,22 +325,22 @@
       <div class="step">
         <div class="step-number">1</div>
         <div class="step-content">
-          <h3>Create your project</h3>
-          <div class="code-block"><code>npm create cocapn</code></div>
+          <h3>Fork and clone</h3>
+          <div class="code-block"><code>git clone https://github.com/Lucineer/makerlog-ai.git && cd makerlog-ai</code></div>
         </div>
       </div>
       <div class="step">
         <div class="step-number">2</div>
         <div class="step-content">
           <h3>Set your API key</h3>
-          <div class="code-block"><code>cocapn secret set DEEPSEEK_API_KEY</code></div>
+          <div class="code-block"><code>export ANTHROPIC_API_KEY=sk-ant-...  # or OPENAI_API_KEY, DEEPSEEK_API_KEY, etc.</code></div>
         </div>
       </div>
       <div class="step">
         <div class="step-number">3</div>
         <div class="step-content">
-          <h3>Start coding</h3>
-          <div class="code-block"><code>cocapn start --public ./my-site</code></div>
+          <h3>Run it</h3>
+          <div class="code-block"><code>npm install && npm run dev  # → http://localhost:8787</code></div>
         </div>
       </div>
     </div>
@@ -150,47 +358,20 @@
       </div>
       <div class="footer-col">
         <h4>Project</h4>
-        <a href="https://github.com/nicholasgriffintn/cocapn">GitHub</a>
+        <a href="https://github.com/Lucineer/cocapn">GitHub</a>
         <a href="app.html">IDE</a>
-        <a href="https://github.com/nicholasgriffintn/cocapn/blob/main/LICENSE">License (MIT)</a>
+        <a href="https://github.com/Lucineer/cocapn/blob/main/LICENSE">License (MIT)</a>
       </div>
       <div class="footer-col">
         <h4>Docs</h4>
-        <a href="https://github.com/nicholasgriffintn/cocapn/tree/main/docs">Architecture</a>
-        <a href="https://github.com/nicholasgriffintn/cocapn/blob/main/CLAUDE.md">CLAUDE.md</a>
-        <a href="https://github.com/nicholasgriffintn/cocapn/issues">Issues</a>
+        <a href="https://github.com/Lucineer/cocapn/tree/main/docs">Architecture</a>
+        <a href="https://github.com/Lucineer/cocapn/blob/main/CLAUDE.md">CLAUDE.md</a>
+        <a href="https://github.com/Lucineer/cocapn/issues">Issues</a>
       </div>
     </div>
     <div class="footer-bottom">
-      <p>Open source under MIT. Built with cocapn.</p>
+      <p>Open source under MIT. Built with cocapn. Author: Superinstance</p>
     </div>
   </footer>
-
-  <script>
-    (function () {
-      var typed = document.getElementById('typed-text');
-      var response = document.getElementById('agent-response');
-      var done = document.getElementById('agent-done');
-      var text = 'fix the race condition in auth/refresh.ts';
-      var i = 0;
-
-      function type() {
-        if (i < text.length) {
-          typed.textContent += text.charAt(i);
-          i++;
-          setTimeout(type, 50 + Math.random() * 40);
-        } else {
-          setTimeout(function () {
-            response.classList.remove('hidden');
-            setTimeout(function () {
-              done.classList.remove('hidden');
-            }, 2200);
-          }, 600);
-        }
-      }
-
-      setTimeout(type, 1200);
-    })();
-  </script>
 </body>
 </html>
