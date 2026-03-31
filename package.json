@@ -1,0 +1,35 @@
+{
+  "name": "makerlog-ai",
+  "version": "0.1.0",
+  "description": "Your development environment. In your repo. BYOK, multi-runtime, repo-first AI dev platform.",
+  "type": "module",
+  "main": "src/worker.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "development",
+    "byok",
+    "cloudflare-workers",
+    "cocapn",
+    "repo-first"
+  ],
+  "author": "Superinstance",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.0.0",
+    "wrangler": "^3.0.0"
+  }
+}
