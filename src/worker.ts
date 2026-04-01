@@ -14,6 +14,9 @@ import { normalizeTelegram, normalizeDiscord } from './channels/normalize.js';
 import { BillingManager } from './billing/index.js';
 import { ProviderRegistry } from './providers/index.js';
 import type { ProviderConfig } from './providers/index.js';
+import { CostTracker } from './analytics/cost-tracker.js';
+import { SpriteGenerator, type SpriteOptions, type TileTheme, type UIOptions, type ParallaxLayer, type BackgroundOptions, PALETTES, type VisionConfig } from './vision/sprites.js';
+import { ResolutionPipeline, type PipelineStage, FEEDBACK_TRIGGERS } from './vision/pipeline.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,6 +37,7 @@ interface Env {
   DEEPSEEK_API_KEY: string;
   GROQ_API_KEY: string;
   OLLAMA_HOST: string;
+  GEMINI_API_KEY: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +51,7 @@ function resolveProviderConfig(env: Env): ProviderConfig {
       anthropic: env.ANTHROPIC_API_KEY,
       openai: env.OPENAI_API_KEY,
       deepseek: env.DEEPSEEK_API_KEY,
+      'deepseek-reasoner': env.DEEPSEEK_API_KEY,
       groq: env.GROQ_API_KEY,
       ollama: undefined,
     };
@@ -59,6 +64,7 @@ function resolveProviderConfig(env: Env): ProviderConfig {
       anthropic: 'claude-sonnet-4-20250514',
       openai: 'gpt-4o',
       deepseek: 'deepseek-chat',
+      'deepseek-reasoner': 'deepseek-reasoner',
       groq: 'llama-3.1-70b-versatile',
       ollama: 'llama3',
     };
@@ -178,6 +184,20 @@ app.post('/api/chat', async (c) => {
         event: 'error',
         data: JSON.stringify({ error: msg }),
       });
+    }
+
+    // Record cost analytics
+    if (totalTokens > 0 || totalCost > 0) {
+      const tracker = new CostTracker(c.env.KV, c.env.DB);
+      const provider = config.provider;
+      await tracker.record({
+        provider,
+        model: config.model,
+        inputTokens: Math.round(totalTokens * 0.5),
+        outputTokens: Math.round(totalTokens * 0.5),
+        cost: totalCost,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
     }
 
     await stream.writeSSE({
@@ -333,6 +353,162 @@ app.get('/api/usage', async (c) => {
   ]);
 
   return c.json({ enabled: true, report, access });
+});
+
+// ---------------------------------------------------------------------------
+// Analytics — Cost tracking
+// ---------------------------------------------------------------------------
+
+app.get('/api/analytics/costs', async (c) => {
+  const tracker = new CostTracker(c.env.KV, c.env.DB);
+  const summary = await tracker.getSummary();
+  return c.json(summary);
+});
+
+// ---------------------------------------------------------------------------
+// Vision — Sprite generation
+// ---------------------------------------------------------------------------
+
+// Lazy singletons (per-request, stateless on Workers; KV/R2 persist assets)
+function makeSpriteGenerator(env: Env): SpriteGenerator {
+  const config: VisionConfig = {
+    backend: 'auto',
+    ollamaModel: 'llava',
+    geminiApiKey: env.GEMINI_API_KEY,
+  };
+  return new SpriteGenerator(config);
+}
+
+const pipelines = new Map<string, ResolutionPipeline>();
+
+app.post('/api/generate/sprite', async (c) => {
+  const body = await c.req.json<{
+    prompt: string;
+    options?: SpriteOptions;
+  }>();
+  if (!body.prompt) return c.json({ error: 'Missing prompt' }, 400);
+
+  const gen = makeSpriteGenerator(c.env);
+  const asset = await gen.generateSprite(body.prompt, body.options);
+
+  // Persist to R2 for gallery
+  const pngData = Uint8Array.from(atob(asset.data), (ch) => ch.charCodeAt(0));
+  await c.env.BUCKET.put(`vision/${asset.id}.png`, pngData);
+  await c.env.KV.put(`vision:meta:${asset.id}`, JSON.stringify(asset));
+
+  return c.json(asset);
+});
+
+app.post('/api/generate/tileset', async (c) => {
+  const body = await c.req.json<{
+    theme: TileTheme;
+    options?: { tileSize?: number; tileCount?: number; seed?: number };
+  }>();
+  if (!body.theme) return c.json({ error: 'Missing theme' }, 400);
+
+  const gen = makeSpriteGenerator(c.env);
+  const asset = await gen.generateTileset(body.theme, body.options);
+
+  const pngData = Uint8Array.from(atob(asset.data), (ch) => ch.charCodeAt(0));
+  await c.env.BUCKET.put(`vision/${asset.id}.png`, pngData);
+  await c.env.KV.put(`vision:meta:${asset.id}`, JSON.stringify(asset));
+
+  return c.json(asset);
+});
+
+app.post('/api/generate/ui', async (c) => {
+  const body = await c.req.json<{
+    prompt: string;
+    options: UIOptions;
+  }>();
+  if (!body.options?.element) return c.json({ error: 'Missing options.element' }, 400);
+
+  const gen = makeSpriteGenerator(c.env);
+  const asset = await gen.generateUI(body.prompt, body.options);
+
+  const pngData = Uint8Array.from(atob(asset.data), (ch) => ch.charCodeAt(0));
+  await c.env.BUCKET.put(`vision/${asset.id}.png`, pngData);
+  await c.env.KV.put(`vision:meta:${asset.id}`, JSON.stringify(asset));
+
+  return c.json(asset);
+});
+
+app.post('/api/generate/background', async (c) => {
+  const body = await c.req.json<{
+    scene: string;
+    parallax: ParallaxLayer[];
+    options?: BackgroundOptions;
+  }>();
+  if (!body.scene) return c.json({ error: 'Missing scene' }, 400);
+
+  const gen = makeSpriteGenerator(c.env);
+  const asset = await gen.generateBackground(body.scene, body.parallax ?? ['sky', 'background', 'mid'], body.options);
+
+  const pngData = Uint8Array.from(atob(asset.data), (ch) => ch.charCodeAt(0));
+  await c.env.BUCKET.put(`vision/${asset.id}.png`, pngData);
+  await c.env.KV.put(`vision:meta:${asset.id}`, JSON.stringify(asset));
+
+  return c.json(asset);
+});
+
+app.post('/api/generate/refine', async (c) => {
+  const body = await c.req.json<{
+    assetId: string;
+    feedback: string;
+    targetStage?: PipelineStage;
+  }>();
+  if (!body.assetId) return c.json({ error: 'Missing assetId' }, 400);
+
+  let pipeline = pipelines.get(body.assetId);
+  if (!pipeline) {
+    // Start a new pipeline from the existing asset's metadata
+    const meta = await c.env.KV.get(`vision:meta:${body.assetId}`, 'text');
+    if (!meta) return c.json({ error: 'Asset not found' }, 404);
+
+    pipeline = new ResolutionPipeline(makeSpriteGenerator(c.env));
+    const parsed = JSON.parse(meta) as { prompt: string };
+    await pipeline.start(parsed.prompt);
+    pipelines.set(body.assetId, pipeline);
+  }
+
+  const state = body.targetStage
+    ? await pipeline.advance(body.assetId, body.targetStage, body.feedback)
+    : await pipeline.processFeedback(body.assetId, body.feedback ?? 'refine it');
+
+  // Persist the refined asset
+  const currentAsset = state.stages[state.currentStage]?.asset;
+  if (currentAsset) {
+    const pngData = Uint8Array.from(atob(currentAsset.data), (ch) => ch.charCodeAt(0));
+    await c.env.BUCKET.put(`vision/${currentAsset.id}.png`, pngData);
+    await c.env.KV.put(`vision:meta:${currentAsset.id}`, JSON.stringify(currentAsset));
+  }
+
+  return c.json(state);
+});
+
+app.get('/api/gallery', async (c) => {
+  const listed = await c.env.BUCKET.list({ prefix: 'vision/', delimiter: '/' });
+  const assets: unknown[] = [];
+
+  for (const obj of listed.objects) {
+    const id = obj.key.replace('vision/', '').replace('.png', '');
+    const meta = await c.env.KV.get(`vision:meta:${id}`, 'text');
+    if (meta) {
+      try {
+        assets.push(JSON.parse(meta));
+      } catch { /* skip corrupt meta */ }
+    }
+  }
+
+  return c.json({ assets, count: assets.length });
+});
+
+app.get('/api/gallery/:id', async (c) => {
+  const id = c.req.param('id');
+  const meta = await c.env.KV.get(`vision:meta:${id}`, 'text');
+  if (!meta) return c.json({ error: 'Asset not found' }, 404);
+
+  return c.json(JSON.parse(meta));
 });
 
 // ---------------------------------------------------------------------------

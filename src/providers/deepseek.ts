@@ -3,7 +3,9 @@
  * with DeepSeek-specific defaults and cost tracking.
  *
  * Models: deepseek-chat, deepseek-coder, deepseek-reasoner
- * Pricing: ~$0.14 / 1M input, ~$0.28 / 1M output
+ * Pricing:
+ *   deepseek-chat/coder: ~$0.14 / 1M input, ~$0.28 / 1M output
+ *   deepseek-reasoner:   ~$0.55 / 1M input, ~$2.19 / 1M output
  */
 
 import { createOpenAIProvider } from './openai.js';
@@ -18,6 +20,13 @@ const MODEL_ALIASES: Record<string, string> = {
   chat: 'deepseek-chat',
   coder: 'deepseek-coder',
   reasoner: 'deepseek-reasoner',
+};
+
+/** Pricing per 1M tokens by model family */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'deepseek-chat': { input: 0.14, output: 0.28 },
+  'deepseek-coder': { input: 0.14, output: 0.28 },
+  'deepseek-reasoner': { input: 0.55, output: 2.19 },
 };
 
 export interface DeepSeekProvider extends Provider {
@@ -42,7 +51,9 @@ export function createDeepSeekProvider(
     model,
   });
 
-  // Override cost estimation with DeepSeek pricing
+  // Pick pricing for this model
+  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['deepseek-chat'];
+
   return {
     name: 'deepseek',
 
@@ -50,8 +61,7 @@ export function createDeepSeekProvider(
     chatStream: wrapped.chatStream.bind(wrapped),
 
     estimateCost(tokens: number): number {
-      // DeepSeek is dramatically cheaper: $0.14 input, $0.28 output per 1M
-      return (tokens * 0.5 * (0.14 + 0.28)) / 1_000_000;
+      return (tokens * 0.5 * (pricing.input + pricing.output)) / 1_000_000;
     },
   };
 }

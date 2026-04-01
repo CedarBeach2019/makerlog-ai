@@ -17,7 +17,8 @@
     connected: false,
     streaming: false,
     treeData: null,
-    contextTarget: null
+    contextTarget: null,
+    terminalCollapsed: false,
   };
 
   // ===== Utilities =====
@@ -676,11 +677,19 @@
     constructor() {
       this.output = $('#terminal-output');
       this.input = $('#terminal-input');
+      this.collapsed = false;
       this.initEvents();
       this.write('Makerlog AI Terminal ready', 'info');
     }
 
     initEvents() {
+      // Toggle collapse on header click
+      const header = $('#terminal-header');
+      if (header) {
+        header.style.cursor = 'pointer';
+        header.addEventListener('dblclick', () => this.toggleCollapse());
+      }
+
       this.input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const cmd = this.input.value.trim();
@@ -734,6 +743,18 @@
       this.output.appendChild(line);
       this.output.scrollTop = this.output.scrollHeight;
     }
+
+    toggleCollapse() {
+      this.collapsed = !this.collapsed;
+      const area = $('#terminal-area');
+      if (this.collapsed) {
+        area.style.height = '32px';
+        area.style.overflow = 'hidden';
+      } else {
+        area.style.height = '';
+        area.style.overflow = '';
+      }
+    }
   }
 
   // ===== StatusBar Class =====
@@ -757,6 +778,22 @@
         if (data.tokens) this.updateTokens(data.tokens);
         if (data.cost) this.updateCost(data.cost);
         state.connected = data.status === 'connected';
+
+        // Fetch cost analytics
+        try {
+          const costRes = await fetch('/api/analytics/costs');
+          if (costRes.ok) {
+            const costData = await costRes.json();
+            if (costData.totalCost !== undefined) {
+              state.totalCost = costData.totalCost;
+              this.costEl.textContent = 'Cost: $' + state.totalCost.toFixed(4);
+            }
+            if (costData.totalTokens !== undefined) {
+              state.totalTokens = costData.totalTokens;
+              this.tokensEl.textContent = 'Tokens: ' + state.totalTokens.toLocaleString();
+            }
+          }
+        } catch { /* analytics optional */ }
       } catch {
         this.updateConnection('disconnected');
         state.connected = false;
@@ -875,5 +912,217 @@
 
   // Initial chat greeting
   chat.addMessage('system', 'Agent ready. Type a message or /help for commands.');
+
+  // ===== Vision Panel (Sprite Generator) =====
+  const visionModal = $('#vision-modal');
+  const statusVision = $('#status-vision');
+
+  if (statusVision) {
+    statusVision.addEventListener('click', () => visionModal.classList.toggle('open'));
+  }
+  const visionClose = $('#vision-close');
+  if (visionClose) {
+    visionClose.addEventListener('click', () => visionModal.classList.remove('open'));
+  }
+
+  // Type selector toggles
+  const visionType = $('#vision-type');
+  const themeRow = $('#vision-theme-row');
+  const uiRow = $('#vision-ui-row');
+  if (visionType) {
+    visionType.addEventListener('change', () => {
+      if (themeRow) themeRow.style.display = visionType.value === 'tileset' ? '' : 'none';
+      if (uiRow) uiRow.style.display = visionType.value === 'ui' ? '' : 'none';
+    });
+  }
+
+  let currentAssetId = null;
+  const galleryAssets = [];
+
+  // Generate button
+  const generateBtn = $('#vision-generate-btn');
+  if (generateBtn) {
+    generateBtn.addEventListener('click', async () => {
+      const prompt = $('#vision-prompt').value.trim();
+      if (!prompt) return;
+
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating...';
+
+      try {
+        const type = visionType.value;
+        let endpoint, body;
+
+        if (type === 'tileset') {
+          endpoint = '/api/generate/tileset';
+          body = { theme: $('#vision-theme').value, options: { tileSize: parseInt($('#vision-size').value), tileCount: 16 } };
+        } else if (type === 'ui') {
+          endpoint = '/api/generate/ui';
+          body = { prompt, options: { element: $('#vision-ui-element').value, width: 64, height: 24 } };
+        } else if (type === 'background') {
+          endpoint = '/api/generate/background';
+          body = { scene: prompt, parallax: ['sky', 'background', 'mid', 'foreground'] };
+        } else {
+          endpoint = '/api/generate/sprite';
+          body = {
+            prompt,
+            options: {
+              size: parseInt($('#vision-size').value),
+              style: $('#vision-style').value,
+              category: $('#vision-category').value,
+              animate: $('#vision-animate').checked,
+            }
+          };
+        }
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const asset = await res.json();
+
+        currentAssetId = asset.id;
+        galleryAssets.unshift(asset);
+        renderPreview(asset);
+        renderGallery();
+
+        // Show pipeline controls for sprites
+        const pipeline = $('#vision-pipeline');
+        if (pipeline) pipeline.style.display = type === 'sprite' ? '' : 'none';
+        const exportDiv = $('#vision-export');
+        if (exportDiv) exportDiv.style.display = '';
+      } catch (err) {
+        console.error('[vision] Generate failed:', err);
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate';
+      }
+    });
+  }
+
+  function renderPreview(asset) {
+    const canvas = $('#vision-canvas');
+    const empty = $('#vision-preview-empty');
+    const meta = $('#vision-preview-meta');
+    if (!canvas) return;
+
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0);
+      canvas.style.display = '';
+      if (empty) empty.style.display = 'none';
+      if (meta) {
+        meta.style.display = '';
+        const sizeSpan = $('#vision-preview-size');
+        const idSpan = $('#vision-preview-id');
+        if (sizeSpan) sizeSpan.textContent = `${img.width}x${img.height}`;
+        if (idSpan) idSpan.textContent = asset.id?.slice(0, 12) ?? '';
+      }
+    };
+    img.src = `data:image/png;base64,${asset.data}`;
+  }
+
+  function renderGallery() {
+    const grid = $('#vision-gallery-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (const asset of galleryAssets) {
+      const thumb = document.createElement('img');
+      thumb.className = 'gallery-thumb';
+      thumb.src = `data:image/png;base64,${asset.data}`;
+      thumb.title = asset.prompt ?? asset.id;
+      thumb.addEventListener('click', () => {
+        currentAssetId = asset.id;
+        renderPreview(asset);
+      });
+      grid.appendChild(thumb);
+    }
+  }
+
+  // Pipeline controls
+  ['refine-btn', 'final-btn', 'upscale-btn'].forEach((id) => {
+    const btn = $(`#vision-${id}`);
+    if (!btn) return;
+    const stage = id.replace('-btn', '');
+    btn.addEventListener('click', async () => {
+      if (!currentAssetId) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/generate/refine', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ assetId: currentAssetId, feedback: `${stage} it`, targetStage: stage }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const state = await res.json();
+        const asset = state.stages?.[state.currentStage]?.asset;
+        if (asset) {
+          currentAssetId = asset.id;
+          galleryAssets.unshift(asset);
+          renderPreview(asset);
+          renderGallery();
+          // Update pipeline stage indicators
+          document.querySelectorAll('.pipeline-stage').forEach((el) => {
+            const s = el.dataset.stage;
+            el.classList.toggle('done', STAGE_ORDER.indexOf(s) < STAGE_ORDER.indexOf(state.currentStage));
+            el.classList.toggle('active', s === state.currentStage);
+          });
+        }
+      } catch (err) {
+        console.error('[vision] Refine failed:', err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  const STAGE_ORDER = ['draft', 'refine', 'final', 'upscale'];
+
+  // Export buttons
+  const exportPng = $('#vision-export-png');
+  if (exportPng) {
+    exportPng.addEventListener('click', () => {
+      const asset = galleryAssets.find(a => a.id === currentAssetId);
+      if (!asset) return;
+      const link = document.createElement('a');
+      link.download = `${asset.id ?? 'sprite'}.png`;
+      link.href = `data:image/png;base64,${asset.data}`;
+      link.click();
+    });
+  }
+
+  const exportB64 = $('#vision-export-base64');
+  if (exportB64) {
+    exportB64.addEventListener('click', () => {
+      const asset = galleryAssets.find(a => a.id === currentAssetId);
+      if (!asset) return;
+      navigator.clipboard.writeText(asset.data).then(() => {
+        exportB64.textContent = 'Copied!';
+        setTimeout(() => { exportB64.textContent = 'Copy Base64'; }, 1500);
+      });
+    });
+  }
+
+  // Load gallery on open
+  if (statusVision) {
+    statusVision.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/gallery');
+        if (res.ok) {
+          const data = await res.json();
+          galleryAssets.length = 0;
+          galleryAssets.push(...(data.assets ?? []));
+          renderGallery();
+        }
+      } catch { /* gallery fetch failed */ }
+    });
+  }
 
 })();

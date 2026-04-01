@@ -7,7 +7,7 @@
 // ── Types ────────────────────────────────────────────────────────────────
 
 export interface ProviderConfig {
-  provider: 'anthropic' | 'deepseek' | 'openai' | 'ollama' | 'groq' | 'custom';
+  provider: 'anthropic' | 'deepseek' | 'deepseek-reasoner' | 'openai' | 'ollama' | 'groq' | 'custom';
   apiKey?: string;
   baseUrl?: string;
   model: string;
@@ -53,6 +53,7 @@ export const PRICING: Record<string, { input: number; output: number }> = {
   anthropic: { input: 3.0, output: 15.0 },
   openai: { input: 2.5, output: 10.0 },
   deepseek: { input: 0.14, output: 0.28 },
+  'deepseek-reasoner': { input: 0.55, output: 2.19 },
   groq: { input: 0.59, output: 0.79 },
   ollama: { input: 0, output: 0 },
   custom: { input: 0, output: 0 },
@@ -86,6 +87,7 @@ export class ProviderRegistry implements Provider {
       ['ANTHROPIC_API_KEY', 'anthropic'],
       ['OPENAI_API_KEY', 'openai'],
       ['DEEPSEEK_API_KEY', 'deepseek'],
+      ['DEEPSEEK_REASONER', 'deepseek-reasoner'],
       ['GROQ_API_KEY', 'groq'],
       ['OLLAMA_HOST', 'ollama'],
     ];
@@ -111,6 +113,7 @@ export class ProviderRegistry implements Provider {
       anthropic: process.env.ANTHROPIC_API_KEY,
       openai: process.env.OPENAI_API_KEY,
       deepseek: process.env.DEEPSEEK_API_KEY,
+      'deepseek-reasoner': process.env.DEEPSEEK_API_KEY,
       groq: process.env.GROQ_API_KEY,
       ollama: undefined,
       custom: process.env.CUSTOM_API_KEY,
@@ -126,6 +129,7 @@ export class ProviderRegistry implements Provider {
       anthropic: 'claude-sonnet-4-20250514',
       openai: 'gpt-4o',
       deepseek: 'deepseek-chat',
+      'deepseek-reasoner': 'deepseek-reasoner',
       groq: 'llama-3.1-70b-versatile',
       ollama: 'llama3',
       custom: 'default',
@@ -161,6 +165,11 @@ export class ProviderRegistry implements Provider {
       case 'deepseek':
         provider = await import('./deepseek.js').then((m) =>
           m.createDeepSeekProvider(cfg),
+        );
+        break;
+      case 'deepseek-reasoner':
+        provider = await import('./deepseek.js').then((m) =>
+          m.createDeepSeekProvider({ ...cfg, provider: 'deepseek', model: 'deepseek-reasoner' }),
         );
         break;
       case 'ollama':

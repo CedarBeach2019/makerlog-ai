@@ -1,18 +1,20 @@
-/* === makerlog.ai — Monokai-inspired dev theme === */
+/* === makerlog.ai — Dark terminal dev theme === */
 
 :root {
-  --bg: #1e1e2e;
-  --bg-surface: #181825;
-  --bg-elevated: #313244;
-  --text: #cdd6f4;
-  --text-muted: #6c7086;
-  --accent: #00d4aa;
-  --green: #a6e3a1;
-  --orange: #fab387;
-  --red: #f38ba8;
-  --yellow: #f9e2af;
-  --blue: #89b4fa;
-  --purple: #cba6f7;
+  --bg: #0a0a0a;
+  --bg-surface: #111111;
+  --bg-elevated: #1a1a1a;
+  --text: #e4e4e7;
+  --text-muted: #71717a;
+  --accent: #22c55e;
+  --accent-dim: rgba(34, 197, 94, 0.15);
+  --green: #22c55e;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --blue: #3b82f6;
+  --purple: #a855f7;
+  --cyan: #06b6d4;
   --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   --radius: 8px;
@@ -52,7 +54,7 @@ nav {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(30, 30, 46, 0.92);
+  background: rgba(10, 10, 10, 0.92);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--bg-elevated);
 }
@@ -148,11 +150,11 @@ nav {
 .btn-primary {
   background: var(--accent);
   color: var(--bg);
-  box-shadow: 0 4px 20px rgba(0, 212, 170, 0.25);
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.25);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 28px rgba(0, 212, 170, 0.35);
+  box-shadow: 0 6px 28px rgba(34, 197, 94, 0.35);
 }
 
 .btn-secondary {
@@ -174,7 +176,7 @@ nav {
   border: 1px solid var(--bg-elevated);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
 }
 
 .terminal-bar {
@@ -277,7 +279,7 @@ nav {
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--accent);
-  background: rgba(0, 212, 170, 0.1);
+  background: var(--accent-dim);
   display: inline-block;
   padding: 4px 10px;
   border-radius: 4px;
@@ -582,8 +584,9 @@ footer {
   justify-content: space-between;
   height: 28px;
   padding: 0 12px;
-  background: var(--accent);
-  color: var(--bg);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-top: 1px solid var(--bg-elevated);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 600;
@@ -673,7 +676,7 @@ footer {
   border-top: 1px solid var(--bg-elevated);
   color: var(--text);
 }
-.comparison-table tr:hover td { background: rgba(0, 212, 170, 0.03); }
+.comparison-table tr:hover td { background: rgba(34, 197, 94, 0.03); }
 .comparison-table .check { color: var(--accent); font-weight: 700; }
 .comparison-table .cross { color: var(--text-muted); }
 .comparison-table .partial { color: var(--orange); }
@@ -733,10 +736,10 @@ footer {
   }
 
   .nav-links {
-    gap: 16px;
+    gap: 12px;
   }
 
-  .nav-links a:not(.cta-link) {
+  .nav-links a:not(.cta-link):not(.github-badge) {
     display: none;
   }
 
