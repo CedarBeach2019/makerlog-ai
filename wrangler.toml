@@ -1,20 +1,12 @@
 name = "makerlog-ai"
 main = "src/worker.ts"
 compatibility_date = "2024-01-01"
-compatibility_flags = ["nodejs_compat"]
-
-[vars]
-ENVIRONMENT = "production"
 
 [[kv_namespaces]]
 binding = "MEMORY"
-id = "your-kv-namespace-id"
+id = "903309ab894b4b66806067bee11b8c36"
 
-[[r2_buckets]]
-binding = "REPO_STORAGE"
-bucket_name = "makerlog-repos"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "makerlog-db"
-database_id = "your-d1-database-id"
+[vars]
+AGENT_NAME = "MakerLog"
+AGENT_TONE = "helpful, technical, creative"
+AGENT_AVATAR = "🔧"
