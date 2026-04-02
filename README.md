@@ -1,8 +1,12 @@
-# MakerLog.ai
+# MAKERLOG-AI
 
-> AI Coding Agent — part of the [Cocapn](https://cocapn.ai) ecosystem
+> AI-Powered Maker & Creator Log — part of the [Cocapn](https://cocapn.ai) ecosystem
 
 ![Build](https://img.shields.io/badge/build-passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-45_files-blue) ![Lines](https://img.shields.io/badge/lines-9281-green)
+
+## Description
+
+AI-Powered Maker & Creator Log. Part of the Cocapn ecosystem of AI-powered log and analysis tools.
 
 ## ✨ Features
 
@@ -31,10 +35,8 @@ npx wrangler dev
 Optimized for Claude Code with full agent support:
 
 - **CLAUDE.md** — Complete project context, conventions, and architecture
-- **.claude/agents/** — 3 specialized sub-agents for exploration, architecture, and review
+- **.claude/agents/** — Specialized sub-agents for exploration, architecture, and review
 - **.claude/settings.json** — Permissions and plugin configuration
-
-Just run `claude` in the repo directory and the agent has full context.
 
 ## 🏗️ Architecture
 
@@ -71,27 +73,13 @@ npx wrangler deploy
 
 Requires `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` environment variables.
 
-## 📊 Stats
-
-- **45** TypeScript files
-- **9281** lines of code
-- **7** LLM providers
-- **0** runtime dependencies
-- **3** specialized Claude Code agents
-
 ## 🔗 Links
 
 - 🌐 **Live**: https://makerlog-ai.magnus-digennaro.workers.dev
 - ❤️ **Health**: https://makerlog-ai.magnus-digennaro.workers.dev/health
 - ⚙️ **Setup**: https://makerlog-ai.magnus-digennaro.workers.dev/setup
 - 🧠 **Cocapn**: https://cocapn.ai
-- 📚 **Papermill**: https://github.com/Lucineer/papermill
-- 📋 **All Repos**: https://github.com/Lucineer
 
-## 📜 License
+## License
 
-MIT
-
----
-
-Built with ❤️ by [SuperInstance](https://github.com/superinstance)
+MIT — Built with ❤️ by [Superinstance](https://github.com/superinstance) & [Lucineer](https://github.com/Lucineer) (DiGennaro et al.)
