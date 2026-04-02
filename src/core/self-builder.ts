@@ -1,287 +1,111 @@
-// src/core/self-builder.ts
-// MakerLog.ai - The Agent that Builds Itself
+/**
+ * @file src/core/self-builder.ts
+ * @description The agent that builds itself — reads its own code, identifies improvements, and generates patches.
+ */
 
-import { execSync, writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+// --- Interfaces ---
 
-export interface BuildPhase {
+/**
+ * Represents a potential improvement to the codebase.
+ */
+export interface Improvement {
   id: string;
-  name: string;
+  type: 'bug' | 'feature' | 'refactor' | 'perf' | 'docs';
+  file: string;
   description: string;
-  status: 'pending' | 'active' | 'complete' | 'failed';
-  dependencies: string[];
-  outputs: string[];
-  duration: number;
+  priority: number; // 1-10, 10 is highest
+  code: string; // The suggested code change or patch content
+  applied: boolean;
 }
 
-export interface BuildResult {
-  phase: string;
-  success: boolean;
-  output: string;
-  files: string[];
-  errors: string[];
-  duration: number;
-}
-
+/**
+ * Represents a collection of improvements to be applied.
+ */
 export interface BuildPlan {
   id: string;
-  goal: string;
-  phases: BuildPhase[];
-  status: 'planning' | 'building' | 'complete' | 'failed';
-  created: number;
-  completed?: number;
+  improvements: Improvement[];
+  totalScore: number;
+  estimatedImpact: string; // e.g., 'low', 'medium', 'high'
+  createdAt: number;
 }
 
+/**
+ * A minimal interface for a file manager dependency to handle I/O.
+ */
+export interface FileManager {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+}
+
+// --- SelfBuilder Class ---
+
+/**
+ * The SelfBuilder agent analyzes code, suggests improvements, and manages their application.
+ */
 export class SelfBuilder {
-  private buildHistory: BuildResult[] = [];
-  private plans: Map<string, BuildPlan> = new Map();
-  private errorKnowledgeBase: string[] = [];
-  private repoRoot: string;
+  private improvements: Improvement[] = [];
+  private plans: BuildPlan[] = [];
+  private fileManager: FileManager;
 
-  constructor() {
-    // Assume the agent's repo root is the current working directory
-    this.repoRoot = process.cwd();
+  constructor(fileManager: FileManager) {
+    this.fileManager = fileManager;
   }
 
-  public planBuild(goal: string): BuildPlan {
-    const id = `build_${Date.now()}`;
-    const capabilities = this.getCapabilities();
-    const gaps = this.identifyGaps(capabilities, goal);
+  /**
+   * Analyzes file content to find potential improvements based on a set of heuristics.
+   * @param fileContent The content of the file to analyze.
+   * @param fileName The name/path of the file.
+   * @returns An array of found improvements.
+   */
+  public analyze(fileContent: string, fileName: string): Improvement[] {
+    const found: Improvement[] = [];
+    const lines = fileContent.split('\n');
 
-    const phases: BuildPhase[] = gaps.map((gap, index) => ({
-      id: `phase_${index}`,
-      name: `Implement ${gap}`,
-      description: `Auto-generated phase to build capability: ${gap} for goal: ${goal}`,
-      status: 'pending' as const,
-      dependencies: index > 0 ? [`phase_${index - 1}`] : [],
-      outputs: [`${gap.toLowerCase().replace(/\s+/g, '-')}.ts`],
-      duration: 0
-    }));
+    // Heuristic: Functions > 50 lines
+    // This is a simplified check and may not be perfectly accurate for all function styles.
+    const functionRegex = /^(?:export\s+)?(?:async\s+)?function\s+\w+\s*\(|const\s+\w+\s*=\s*(?:async\s*)?\(/;
+    let funcStart = -1;
+    let braceCount = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (functionRegex.test(lines[i])) {
+            funcStart = i;
+        }
+        if (funcStart !== -1) {
+            braceCount += (lines[i].match(/{/g) || []).length;
+            braceCount -= (lines[i].match(/}/g) || []).length;
+            if (braceCount === 0 && i > funcStart) {
+                const lineCount = i - funcStart + 1;
+                if (lineCount > 50) {
+                    found.push(this.createImprovement('refactor', fileName, `Function starting on line ${funcStart + 1} is too long (${lineCount} lines). Consider splitting it.`, 6));
+                }
+                funcStart = -1;
+            }
+        }
+    }
 
-    // Add a final testing phase
-    phases.push({
-      id: `phase_${gaps.length}`,
-      name: 'Integration Testing',
-      description: 'Run full test suite to validate all new capabilities together.',
-      status: 'pending',
-      dependencies: gaps.map((_, index) => `phase_${index}`),
-      outputs: ['test-results.log'],
-      duration: 0
+    // Heuristic: Deep nesting (>3 levels)
+    let maxDepth = 0;
+    let currentDepth = 0;
+    lines.forEach(line => {
+        const indent = line.match(/^\s*/)?.[0].length || 0;
+        currentDepth = Math.floor(indent / 2); // Assuming 2-space indentation
+        if (currentDepth > maxDepth) maxDepth = currentDepth;
     });
+    if (maxDepth > 3) {
+        found.push(this.createImprovement('refactor', fileName, `Deep nesting detected (depth ${maxDepth}). Consider using early returns.`, 7));
+    }
 
-    const plan: BuildPlan = {
-      id,
-      goal,
-      phases,
-      status: 'planning',
-      created: Date.now()
-    };
-
-    this.plans.set(id, plan);
-    return plan;
-  }
-
-  public async executeBuild(planId: string): Promise<BuildResult[]> {
-    const plan = this.plans.get(planId);
-    if (!plan) throw new Error(`Build plan ${planId} not found.`);
-
-    plan.status = 'building';
-    const results: BuildResult[] = [];
-
-    for (const phase of plan.phases) {
-      const result = await this.executePhase(phase);
-      results.push(result);
-      this.buildHistory.push(result);
-
-      if (!result.success) {
-        plan.status = 'failed';
-        this.learnFromError(result.errors.join('\n'));
-        return results;
+    lines.forEach((line, i) => {
+      // Heuristic: Missing types (any)
+      if (/\s*:\s*any\b|\bany\s*\[\]/.test(line)) {
+        found.push(this.createImprovement('refactor', fileName, `Use of 'any' type on line ${i + 1}. Use a specific type.`, 5));
       }
-    }
-
-    plan.status = 'complete';
-    plan.completed = Date.now();
-    return results;
-  }
-
-  public async executePhase(phase: BuildPhase): Promise<BuildResult> {
-    phase.status = 'active';
-    const start = Date.now();
-    const files: string[] = [];
-    const errors: string[] = [];
-    let output = '';
-    let success = false;
-
-    try {
-      if (phase.name === 'Integration Testing') {
-        const testResult = await this.testCode(this.repoRoot);
-        success = testResult.pass;
-        output = testResult.output;
-      } else {
-        const code = await this.generateCode(phase.description);
-        const filePath = join(this.repoRoot, 'src', phase.outputs[0]);
-        
-        if (!this.writeCode(filePath, code)) {
-          throw new Error(`Failed to write file to ${filePath}`);
-        }
-        
-        files.push(filePath);
-        
-        const testResult = await this.testCode(filePath);
-        if (!testResult.pass) {
-          const fixed = await this.fixErrors(filePath, testResult.output.split('\n'));
-          if (!fixed) {
-            errors.push(...testResult.output.split('\n'));
-            throw new Error('Auto-fix failed.');
-          }
-        }
-        success = true;
-        output = `Phase ${phase.name} completed successfully.`;
+      // Heuristic: Long parameter lists (>5)
+      const paramsMatch = line.match(/\(([^)]*)\)/);
+      if (paramsMatch && paramsMatch[1].split(',').length > 5) {
+        found.push(this.createImprovement('refactor', fileName, `Long parameter list on line ${i + 1}. Consider an options object.`, 4));
       }
-    } catch (err: any) {
-      success = false;
-      phase.status = 'failed';
-      output = err.message || 'Unknown execution error';
-      if (errors.length === 0) errors.push(output);
-    } finally {
-      phase.duration = Date.now() - start;
-      if (success) phase.status = 'complete';
-    }
-
-    return { phase: phase.id, success, output, files, errors, duration: phase.duration };
-  }
-
-  public async generateCode(description: string): Promise<string> {
-    // Mock implementation of an LLM BYOK call
-    // In production, this routes to OpenAI/Anthropic via user's API key
-    console.log(`[SelfBuilder/LLM] Generating code for: "${description}"`);
-    
-    const knowledgeContext = this.errorKnowledgeBase.length > 0 
-      ? `\n// Avoid past mistakes:\n// ${this.errorKnowledgeBase.join('\n// ')}\n` 
-      : '';
-
-    return Promise.resolve(`
-// Auto-generated by MakerLog.ai SelfBuilder
-${knowledgeContext}
-export function execute() {
-  console.log("Executing generated module for: ${description}");
-  return true;
-}
-`);
-  }
-
-  public writeCode(path: string, code: string): boolean {
-    try {
-      const dir = join(path, '..');
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      writeFileSync(path, code, 'utf-8');
-      return true;
-    } catch (err) {
-      console.error(`[SelfBuilder] Error writing to ${path}:`, err);
-      return false;
-    }
-  }
-
-  public async testCode(path: string): Promise<{ pass: boolean; output: string }> {
-    try {
-      // Basic mock execution for testing
-      const command = `npx ts-node ${path}`;
-      const output = execSync(command, { timeout: 10000 }).toString('utf-8');
-      return { pass: true, output };
-    } catch (err: any) {
-      return { pass: false, output: err.stdout?.toString() || err.message };
-    }
-  }
-
-  public async fixErrors(filePath: string, errors: string[]): Promise<boolean> {
-    console.log(`[SelfBuilder] Attempting to auto-fix ${filePath}...`);
-    const code = readFileSync(filePath, 'utf-8');
-    const prompt = `Fix the following errors in this code:\nErrors: ${errors.join('\n')}\nCode:\n${code}`;
-    const fixedCode = await this.generateCode(prompt);
-    return this.writeCode(filePath, fixedCode);
-  }
-
-  public commitChanges(message: string): boolean {
-    try {
-      execSync('git add .', { cwd: this.repoRoot });
-      execSync(`git commit -m "${message}" --allow-empty`, { cwd: this.repoRoot });
-      return true;
-    } catch (err) {
-      console.error('[SelfBuilder] Commit failed:', err);
-      return false;
-    }
-  }
-
-  public getBuildHistory(): BuildResult[] {
-    return this.buildHistory;
-  }
-
-  public rollback(lastN: number = 1): boolean {
-    try {
-      execSync(`git reset --hard HEAD~${lastN}`, { cwd: this.repoRoot });
-      return true;
-    } catch (err) {
-      console.error('[SelfBuilder] Rollback failed:', err);
-      return false;
-    }
-  }
-
-  public getCapabilities(): string[] {
-    const capabilities: string[] = [];
-    const srcDir = join(this.repoRoot, 'src');
-    
-    if (!existsSync(srcDir)) return ['basic-reasoning'];
-
-    const scanDir = (dir: string) => {
-      const items = readdirSync(dir);
-      for (const item of items) {
-        const fullPath = join(dir, item);
-        if (statSync(fullPath).isDirectory()) {
-          scanDir(fullPath);
-        } else if (item.endsWith('.ts') || item.endsWith('.js')) {
-          capabilities.push(item.replace(/\.[^/.]+$/, ''));
-        }
-      }
-    };
-
-    scanDir(srcDir);
-    return capabilities.length > 0 ? capabilities : ['basic-reasoning'];
-  }
-
-  public identifyGaps(capabilities: string[], goal: string): string[] {
-    // Mock heuristic matching between goal string and existing files
-    const gaps: string[] = [];
-    const lowerGoal = goal.toLowerCase();
-    
-    const standardCapabilities = [
-      'auth-module', 'database-connect', 'api-handler', 'cron-scheduler', 'ai-integration'
-    ];
-
-    for (const cap of standardCapabilities) {
-      if (lowerGoal.includes(cap.split('-')[0]) && !capabilities.includes(cap)) {
-        gaps.push(cap);
-      }
-    }
-
-    if (gaps.length === 0) gaps.push('dynamic-feature-impl');
-    return gaps;
-  }
-
-  public learnFromError(error: string): void {
-    if (!this.errorKnowledgeBase.includes(error)) {
-      this.errorKnowledgeBase.push(error);
-    }
-  }
-
-  public getBuildStats(): { total: number; success: number; failed: number; avgDuration: number } {
-    const total = this.buildHistory.length;
-    const success = this.buildHistory.filter(b => b.success).length;
-    const failed = total - success;
-    const avgDuration = total > 0 
-      ? this.buildHistory.reduce((acc, b) => acc + b.duration, 0) / total 
-      : 0;
-
-    return { total, success, failed, avgDuration };
-  }
-}
+      // Heuristic: Magic numbers
+      if (/[=,\[(]\s*(-?\d+)\s*[;,\])]/.test(line) && !line.includes('const') && !/for\s*\(/.test(line)) {
+        const num = line.match(/[=,\[(]\s*(-?\d+)\s*[;,\])]/)?.[1];
+        if (num &&
