@@ -96,6 +96,15 @@ export default { async fetch(request: Request, env: any) {
   if (url.pathname === '/') return new Response(indexHTML, { headers: { 'Content-Type': 'text/html;charset=utf-8', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*;" } });
 
   if (url.pathname.startsWith('/public/')) { const kv = await env.MAKERLOG_KV?.get('public:' + url.pathname, 'arrayBuffer'); if (kv) return new Response(kv, { headers: { 'Content-Type': url.pathname.endsWith('.png') ? 'image/png' : 'image/jpeg' } }); }
+  if (url.pathname === '/api/evaporation') {
+    return new Response(JSON.stringify({ hot: [], warm: [], coverage: 0, repo: 'makerlog-ai', timestamp: Date.now() }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+  if (url.pathname === '/api/kg') {
+    return new Response(JSON.stringify({ nodes: [], edges: [], domain: 'makerlog-ai', timestamp: Date.now() }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+  if (url.pathname === '/api/memory') {
+    return new Response(JSON.stringify({ patterns: [], repo: 'makerlog-ai', timestamp: Date.now() }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
   if (url.pathname === '/api/confidence') {
       const scores = await getConfidence(env);
       return new Response(JSON.stringify(scores), { headers: jsonHeaders });
