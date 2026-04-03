@@ -2,6 +2,8 @@ import { evapPipeline, getEvapReport, getLockStats } from './lib/evaporation-pip
 import { selectModel } from './lib/model-router.js';
 import { trackConfidence, getConfidence } from './lib/confidence-tracker.js';
 import { loadBYOKConfig, callLLM, generateSetupHTML } from './lib/byok.js';
+import { evapPipeline } from './lib/evaporation-pipeline.js';
+
 import { softActualize, confidenceScore } from './lib/soft-actualize.js';
 import { deadbandCheck, deadbandStore, getEfficiencyStats } from './lib/deadband.js';
 import { logResponse } from './lib/response-logger.js';
@@ -64,9 +66,16 @@ export default { async fetch(request: Request, env: any) {
     const messages = body.messages || [];
     const confidence = confidenceScore(messages[messages.length - 1]?.content || '', true, !!config);
     const userMessage = messages.map((m: any) => m.content || '').join(' ');
-    const cached = await deadbandCheck(env, userMessage);
     let r;
-    if (cached) { r = { content: cached, ok: true }; } else { r = await softActualize(() => callLLM(config, messages, { system: SEED.systemPrompt }), { content: 'I could not generate a response.', ok: false }, 'callLLM'); await deadbandStore(env, userMessage, r.content); }
+    try {
+      const evapResult = await evapPipeline(env, userMessage, async () => {
+        const res = await callLLM(config, messages, { system: SEED.systemPrompt });
+        return typeof res === 'string' ? res : res.content || res.choices?.[0]?.message?.content || 'No response generated.';
+      }, 'makerlog-ai');
+      r = { content: evapResult.response, ok: true };
+    } catch (e) {
+      r = { content: 'I could not generate a response.', ok: false };
+    }
 
     // Persist conversation summary to KV
     if (body.sessionId && env.MAKERLOG_KV) {
