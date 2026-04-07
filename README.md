@@ -4,25 +4,43 @@
 
 <h1 align="center">makerlog-ai</h1>
 
-<p align="center">AI maker's companion. Code-first, prototype-fast, ship it.</p>
+<p align="center">An AI agent that runs alongside your code. Fork-first, deploy to your own infra.</p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
   <a href="#features">Features</a> ·
-  <a href="#the-fleet">The Fleet</a> ·
+  <a href="#limitations">Limitations</a> ·
   <a href="https://github.com/Lucineer/makerlog-ai/issues">Issues</a>
 </p>
 
 ---
 
-**Live:** [makerlog-ai](https://makerlog-ai.casey-digennaro.workers.dev) · **Powered by [Capitaine](https://github.com/Lucineer/capitaine) · [Cocapn](https://github.com/Lucineer/cocapn)**
+**Live:** [makerlog-ai](https://makerlog-ai.casey-digennaro.workers.dev) · Open source MIT · Runs on Cloudflare Workers
 
-The repo IS the agent. makerlog-ai is a cocapn vessel — a self-improving repository that runs on Cloudflare Workers, thinks with LLMs, and coordinates with the fleet through git.
+You know the loop. You have an idea late, open multiple chat tabs, paste code around, and lose context. This runs in your own repository, maintains session memory, and stays within your workflow.
+
+No SaaS, no waitlists. You fork it, you own it.
+
+---
+
+## Why this exists
+
+Most AI assistants operate outside your actual work. They are browser tabs or third-party services that read your code and reset context frequently. We built this for iterative development—it's the tool we use daily to build the Cocapn Fleet.
+
+## What makes this different
+
+1. **Fork first.** You run an independent copy. There is no upstream instance controlling your agent.
+2. **Zero lock-in.** The agent is a Cloudflare Worker comprising a few source files. All state is in your git history.
+3. **No hidden orchestration.** Every action is committed to your repository where you can review or revert it.
+4. **Part of the fleet.** It implements the fleet protocol, allowing coordination with 40+ other purpose-built vessels when needed.
+
+---
 
 ## Quick Start
 
+Get a private agent running in under two minutes:
+
 ```bash
-# Fork and deploy
 gh repo fork Lucineer/makerlog-ai --clone
 cd makerlog-ai
 npx wrangler login
@@ -31,81 +49,30 @@ echo "your-llm-key" | npx wrangler secret put DEEPSEEK_API_KEY
 npx wrangler deploy
 ```
 
-That's it. The vessel is alive.
+Your agent is now live at the provided Worker URL.
 
 ## Features
 
-- **BYOK v2** — Zero keys in code. All API keys via Cloudflare Secrets Store.
-- **Multi-model** — DeepSeek, SiliconFlow, DeepInfra, Moonshot, z.ai, local models.
-- **Session memory** — Conversations persist and build context over time.
-- **PII safety** — Automatic detection and dehydration of sensitive data.
-- **Rate limiting** — Guest tokens per IP with configurable limits.
-- **Health checks** — Standard `/health` endpoint on all vessels.
-- **Fleet coordination** — CRP-39 protocol for trust, bonds, and events.
+- **BYOK v2** — Secrets stored in Cloudflare's secret store, never in code.
+- **Multi-model support** — Works with DeepSeek, SiliconFlow, DeepInfra, Moonshot, z.ai, and local models.
+- **Session memory** — Maintains context across conversations over time.
+- **PII safety** — Automatically dehydrates sensitive data before LLM calls.
+- **Rate limiting** — Configurable per-IP limits with guest tokens.
+- **Standard health checks** — `/health` endpoint for monitoring.
+- **Fleet coordination** — Implements CRP-39 for cross-vessel events and trust.
+
+## Limitations
+
+This is a single-purpose agent focused on code companionship. It does not include a UI for non-technical users and requires basic familiarity with Cloudflare Workers and GitHub.
 
 ## Architecture
 
-Single-file Cloudflare Worker. Zero runtime dependencies. Inline HTML serving.
+A single-file Cloudflare Worker with zero runtime dependencies. The entire logic is contained in `src/index.js` and uses Cloudflare's native KV for persistence, Durable Objects for session state, and the platform's secret management.
 
-```
-src/
-  worker.ts      # The hull — serves users, runs heartbeats
-lib/
-  byok.ts        # Multi-model routing (BYOK v2)
-  ...
-```
+---
 
-## The Fleet
-
-makerlog-ai is one of 40+ autonomous vessels in the Lucineer fleet. Each vessel is a different domain of one intelligence.
-
-
-<details>
-<summary><strong>⚓ The Fleet</strong></summary>
-
-**Flagship vessels**
-
-- [cocapn.ai](https://github.com/Lucineer/capitaine)
-- [personallog.ai](https://github.com/Lucineer/personallog-ai)
-- [businesslog.ai](https://github.com/Lucineer/businesslog-ai)
-- [studylog.ai](https://github.com/Lucineer/studylog-ai)
-- [makerlog.ai](https://github.com/Lucineer/makerlog-ai)
-- [playerlog.ai](https://github.com/Lucineer/playerlog-ai)
-- [dmlog.ai](https://github.com/Lucineer/dmlog-ai)
-- [reallog.ai](https://github.com/Lucineer/reallog-ai)
-- [deckboss.ai](https://github.com/Lucineer/deckboss-ai)
-
-**Fleet services**
-
-- [Fleet Catalog](https://github.com/Lucineer/capitaine/blob/master/docs/fleet/FLEET.md)
-- [Git Agent (full)](https://github.com/Lucineer/git-agent)
-- [Cocapn Lite (minimal)](https://github.com/Lucineer/cocapn-lite)
-- [Fleet Orchestrator](https://github.com/Lucineer/fleet-orchestrator)
-- [Dead Reckoning Engine](https://github.com/Lucineer/dead-reckoning-engine)
-- [Dream Engine](https://github.com/Lucineer/dream-engine)
-- [Seed UI (5 layers)](https://github.com/Lucineer/seed-ui)
-
-**For power users**
-
-- [Cocapn Lite (tabula rasa)](https://github.com/Lucineer/cocapn-lite)
-- [Cocapn (core platform)](https://github.com/Lucineer/cocapn)
-- [ZeroClaw (framework)](https://github.com/Lucineer/zeroclaw)
-
-[View all 106 repos →](https://github.com/orgs/Lucineer/repositories)
-[Fleet manifest →](https://github.com/Lucineer/capitaine/blob/master/docs/fleet/FLEET.md)
-
-</details>
-
-
-## Philosophy
-
-> The repo is the agent. The agent is the repo. Intelligence crystallizes from fluid (LLM calls) to solid (code). The vessel becomes faster and cheaper as it becomes smarter.
-
-- **Fork-first** — Power users fork and customize. Casual users visit the domain.
-- **Pay-for-convenience** — We save you costs through bulk inference, not markups.
-- **Git as coordination** — Agents compete via PRs, not chat.
-- **Soft actualization** — Vessels evolve gently based on usage, not hard updates.
-
-## License
-
-MIT · Superinstance & Lucineer (DiGennaro et al.)
+<div align="center">
+  <br>
+  <p>Part of the <a href="https://the-fleet.casey-digennaro.workers.dev">Cocapn Fleet</a> · Learn more at <a href="https://cocapn.ai">cocapn.ai</a></p>
+  <p>Attribution: Superinstance & Lucineer (DiGennaro et al.)</p>
+</div>
